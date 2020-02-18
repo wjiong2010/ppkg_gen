@@ -1,11 +1,33 @@
-#include <stdio.h>
+/************************************************************************************
+* FileName: ppkg_com.c
+*
+* Author: John.Wang
+*
+* Date: 2019-02-16
+*
+* Descripiton: generator of a param package auto set, serial prot communicattion
+*************************************************************************************/
+/************************************************************************************
+* Include
+*************************************************************************************/
 #include <windows.h>
-
+    
 #include "debug.h"
-
+/************************************************************************************
+* Define and Declaration
+*************************************************************************************/
 #define COM_RD_BUF      4096
 #define COM_WR_BUF      4096
-
+/************************************************************************************
+* Process
+*************************************************************************************/
+/************************************************************************************
+* Function: com_timeout_set
+* Author @ Date: John.Wang@20200216
+* Input:
+* Return:
+* Description: 
+*************************************************************************************/
 static void com_timeout_set(HANDLE hCom)
 {
     COMMTIMEOUTS TimeOuts;
@@ -29,6 +51,13 @@ static void com_timeout_set(HANDLE hCom)
     SetCommTimeouts(hCom, &TimeOuts);           //设置超时
 }
 
+/************************************************************************************
+* Function: com_config
+* Author @ Date: John.Wang@20200216
+* Input:
+* Return:
+* Description: 
+*************************************************************************************/
 static int com_config(HANDLE hCom, int bd_rate, int byte_size)
 {
     DCB dcb = {0};
@@ -68,11 +97,25 @@ static int com_config(HANDLE hCom, int bd_rate, int byte_size)
     return 0;
 }
 
+/************************************************************************************
+* Function: destroy_com
+* Author @ Date: John.Wang@20200216
+* Input:
+* Return:
+* Description: 
+*************************************************************************************/
 void destroy_com(HANDLE hCom)
 {
     CloseHandle(hCom);
 }
 
+/************************************************************************************
+* Function: create_com
+* Author @ Date: John.Wang@20200216
+* Input:
+* Return:
+* Description: 
+*************************************************************************************/
 HANDLE create_com(char *p_com_name, int bd_rate, int byte_size)
 {
     HANDLE hCom = INVALID_HANDLE_VALUE;
@@ -116,6 +159,13 @@ HANDLE create_com(char *p_com_name, int bd_rate, int byte_size)
     return hCom;
 }
 
+/************************************************************************************
+* Function: com_write
+* Author @ Date: John.Wang@20200216
+* Input:
+* Return:
+* Description: 
+*************************************************************************************/
 DWORD com_write(HANDLE hCom, char* pbuf, int len)
 {
     DWORD dwError;
@@ -138,6 +188,13 @@ DWORD com_write(HANDLE hCom, char* pbuf, int len)
     return wCount;
 }
 
+/************************************************************************************
+* Function: com_read
+* Author @ Date: John.Wang@20200216
+* Input:
+* Return:
+* Description: 
+*************************************************************************************/
 DWORD com_read(HANDLE hCom, char* read_buf, int buf_size)
 {
     #define MAX_BUF_SIZE 128
