@@ -20,6 +20,7 @@ static char g_output_log_buf[MAX_TRACE_LOG_LEN] = {0};
 /************************************************************************************
 * Process
 *************************************************************************************/
+#if 0
 static int debug_get_time(char *pbuff, int buff_size)
 {
 	time_t rawtime;
@@ -33,11 +34,11 @@ static int debug_get_time(char *pbuff, int buff_size)
 	time( &rawtime );
 	info = localtime( &rawtime );
 
-	strftime(pbuff,buff_size,"%Y%m%e_%H%M%S", info);//以年月日_时分秒的形式表示当前时间
+	strftime(pbuff,buff_size,"%Y%m%e_%H%M%S", info);
 
 	return strlen(pbuff);
 }
-
+#endif 
 
 /************************************************************************************
 * Function: debug_print_log_full
@@ -48,8 +49,8 @@ static int debug_get_time(char *pbuff, int buff_size)
 *************************************************************************************/
 int debug_print_log_full(int log_line, char *func_name, char *fmt, ...)
 {
-	int len;
-	int temp_len;
+	int len = 0;
+	//int temp_len;
 	char *buff_p = g_output_log_buf;
 	va_list list;
 
@@ -60,7 +61,7 @@ int debug_print_log_full(int log_line, char *func_name, char *fmt, ...)
 	len = snprintf((char *)(buff_p +len), MAX_TRACE_LOG_LEN - len, "%s %s", __DATE__, __TIME__);
 
 	/* package function name */
-	temp_len = strlen(func_name);
+	//temp_len = strlen(func_name);
 	len += snprintf((char *)(buff_p +len), MAX_TRACE_LOG_LEN - len, "[%s]", func_name);
 
 	/* trace log body */

@@ -16,6 +16,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+/************************************************************************************
+* Extern Function 
+*************************************************************************************/
+typedef unsigned char bool;
 
 /************************************************************************************
 * Extern Function 
@@ -26,12 +30,14 @@ extern int debug_print_log(char *fmt, ...);
 * Macros
 *************************************************************************************/
 #define MAX_TRACE_LOG_LEN  1024
+#define TRUE    1
+#define FALSE   0
 
 #if 1 
 #define DBG_TRACE(format, ...)\
 	do\
 	{\
-		debug_print_log("%s %s[%-26s][%4d]"format"\n", __DATE__, __TIME__, __func__, __LINE__, ##__VA_ARGS__);\
+		debug_print_log("%s %s[%10s][%4d]"format"\n", __DATE__, __TIME__, __func__, __LINE__, ##__VA_ARGS__);\
 	}\
 	while(0);
 #else	/* __DEBUG_SUPPORT__*/
