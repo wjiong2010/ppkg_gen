@@ -322,6 +322,7 @@ static int ppkg_queue_push(cfg_list_queue *queue_p, cmd_node_struct *node_p)
     }  
 
     queue_p->len++;
+    DBG_TRACE("queue_p->len:%d", queue_p->len);
 
     return queue_p->len;
 }
@@ -333,7 +334,7 @@ static int ppkg_queue_push(cfg_list_queue *queue_p, cmd_node_struct *node_p)
 * Return: length of queue
 * Description: pop node from queue head
 *************************************************************************************/
-static int ppkg_queue_pop(cfg_list_queue *queue_p, cmd_node_struct *node_p)
+static int ppkg_queue_pop(cfg_list_queue *queue_p, cmd_node_struct **node_p)
 {
     if (NULL == queue_p)
     {
@@ -343,13 +344,14 @@ static int ppkg_queue_pop(cfg_list_queue *queue_p, cmd_node_struct *node_p)
 
     if (NULL != queue_p->qhead)
     {
-        node_p = queue_p->qhead;
+        *node_p = queue_p->qhead;
         queue_p->qhead = queue_p->qhead->next;
         queue_p->qhead->pre = NULL;
-        node_p->next = NULL;        
+        (*node_p)->next = NULL;        
     }
 
     queue_p->len--;
+    DBG_TRACE("queue_p->len:%d, *node_p:%p", queue_p->len, *node_p);
 
     return queue_p->len;
 }
@@ -387,13 +389,15 @@ static int ppkg_get_cfg_info(cfg_info_struct *cfg_info_p)
         DBG_TRACE("return cfg_info_p NULL");
         return -1;
     }
-    
+
     memset(cfg_info_p, 0, sizeof(cfg_info_struct));
     
     strcpy(cfg_info_p->fm_version, "GV300NR00A04V07M128_MIX_DET");
     strcpy(cfg_info_p->path_def_cfg, "D:\\forfun\\paramPackage_test\\A04V07_default.gv300");
     strcpy(cfg_info_p->path_cust_cfg, "D:\\forfun\\paramPackage_test\\C_GV300_A04V07_M0_0.gv300");
     strcpy(cfg_info_p->path_cust_ini, "D:\\forfun\\paramPackage_test\\C_GV300_A04V07_M0_0_at.ini");
+
+    DBG_TRACE("cfg_info_p->fm_version:%s", cfg_info_p->fm_version);
     
     return 0;
 }
@@ -455,8 +459,57 @@ static int ppkg_read_file(FILE *fp, circal_buffer *cir_buf)
 * Return: 
 * Description: 
 *************************************************************************************/
+static int ppkg_get_cmd_type(const char *cmd_str, char *cmd_type)
+{
+    memcpy(cmd_type, (void*)(cmd_str + CMD_FRAME_HEAD_LEN + 1 + CMD_PREFIX_LEN), MAX_LEN_CMD_TYPE);
+    return (CMD_FRAME_HEAD_LEN + 1 + CMD_PREFIX_LEN);
+}
+
+/************************************************************************************
+* Function: ppkg_covert_to_list
+* Author @ Date: John.Wang@20200216
+* Input:
+* Return: 
+* Description: 
+*************************************************************************************/
+static line_type_enum ppkg_analysis_buff_line(const char *cmd_str, int cmd_len)
+{
+    line_type_enum line_type = UNKOWN_LINE;
+
+    if(cmd_len < CMD_FRAME_HEAD_LEN)
+    {
+        return line_type;
+    }
+
+    if (NULL != strstr(cmd_str, LINE_VERSION_FLAG))
+    {
+        line_type = VER_LINE;
+    }
+    else if (NULL != strstr(cmd_str, LINE_CMD_FLAG))
+    {
+        line_type = CMD_LINE;
+    }
+    else
+    {
+    }
+
+    DBG_TRACE("line_type:%d", line_type);
+    
+    return line_type;
+}
+
+/************************************************************************************
+* Function: ppkg_covert_to_list
+* Author @ Date: John.Wang@20200216
+* Input:
+* Return: 
+* Description: 
+*************************************************************************************/
 static int ppkg_covert_to_list(circal_buffer *cir_buf, cfg_list_queue *queue_p)
 {
+    cmd_node_struct *node_p = NULL;
+    line_type_enum line_type = UNKOWN_LINE;
+    int parsed_len = 0;
     int ret = 0;
 
     if (NULL == cir_buf || NULL == queue_p)
@@ -467,9 +520,31 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, cfg_list_queue *queue_p)
     
     memset(temp_buff, 0, MAX_TEMP_BLOCK_LEN);
     ret = ppkg_read_circal_buff_line(cir_buf, temp_buff, MAX_TEMP_BLOCK_LEN);
-    if (ret > 0)
+    if ((line_type = ppkg_analysis_buff_line(temp_buff, ret)) != UNKOWN_LINE)
     {
-        DBG_TRACE("->len:%d, %s", ret, temp_buff);
+        if (CMD_LINE == line_type)
+        {
+            if ((node_p = (cmd_node_struct *)malloc(sizeof(cmd_node_struct) + ret)) == NULL)
+            {
+                DBG_TRACE("malloc failed");
+                return -1;
+            }
+            memset(node_p, 0, (sizeof(cmd_node_struct) + ret));
+            parsed_len = ppkg_get_cmd_type(temp_buff, node_p->cmd_type);
+
+            /* Skip command type and right " */
+            parsed_len += 4;
+            node_p->cmd_len = ret - parsed_len;
+            
+            memcpy(node_p->cmd_str, &temp_buff[parsed_len], node_p->cmd_len);
+            //DBG_TRACE("->cmd_type:%s, %d, %s", node_p->cmd_type, node_p->cmd_len, node_p->cmd_str);
+            ppkg_queue_push(queue_p, node_p);
+        }
+        else if (VER_LINE == line_type)
+        {
+            /* Maybe used for comfire the version */
+        }
+        
     }
 
     return ret;
@@ -595,13 +670,62 @@ static void ppkg_cmd_list_init(cmd_list_struct *list_p)
 static int ppkg_compare_cmd_list(
             cfg_list_queue *cust_q, cfg_list_queue *def_q, cfg_list_queue *diff_q)
 {
+    cmd_node_struct *cust_node = NULL;
+    cmd_node_struct *def_node = NULL;
+    cmd_node_struct *diff_node = NULL;
+
+    DBG_TRACE("ppkg_compare_cmd_list");
+    
     if (NULL == cust_q || NULL == def_q || NULL == diff_q)
     {
         DBG_TRACE("return cust_q || def_q || diff_q NULL");
         return -1;
     }
+   
+    def_node = ppkg_queue_get_head(def_q); 
+    if (NULL == def_node)
+    {
+        DBG_TRACE("return def_node");
+        return -2;
+    }
     
-    return 0;
+    ppkg_queue_pop(cust_q, &cust_node);
+    DBG_TRACE("cust_node:%p", cust_node);
+    do
+    {
+        do
+        {
+            if (0 == strcmp(cust_node->cmd_type, def_node->cmd_type) &&
+                0 != strcmp(cust_node->cmd_str, def_node->cmd_str)
+                )
+            {
+                if ((diff_node = (cmd_node_struct *)malloc(sizeof(cmd_node_struct))) == NULL)
+                {
+                    DBG_TRACE("malloc failed");
+                    return -1;
+                }
+                memset(diff_node, 0, (sizeof(cmd_node_struct)));
+                strcpy(diff_node->cmd_type, cust_node->cmd_type);
+                DBG_TRACE("->diff_node:%s", diff_node->cmd_type);
+               
+                ppkg_queue_push(diff_q, diff_node);
+                def_node = ppkg_queue_get_head(def_q); 
+                break;
+            }
+            else
+            {
+                def_node = def_node->next;
+            }
+        }
+        while (def_node != NULL);        
+
+        free(cust_node);
+    }
+    while (ppkg_queue_pop(cust_q, &cust_node));
+
+    DBG_TRACE("diff_q->len:%d", diff_q->len);
+    
+    return diff_q->len;
 }
 
 
@@ -615,20 +739,21 @@ static int ppkg_compare_cmd_list(
 int ppkg_gen(void)
 {
     ppkg_init_circal_buff(&cir_buff, memory_block);
+    ppkg_cmd_list_init(&cmd_list);
     
     if (ppkg_get_cfg_info(&cfg_info) < 0)
     {
         DBG_TRACE("return ppkg_get_cfg_info");
         return -1;
     }
-
-    ppkg_cmd_list_init(&cmd_list);
+    //DBG_TRACE("------------>end");
+    //return 0;
     if (ppkg_build_cmd_list(cfg_info.path_def_cfg, &cmd_list.def_cfg) < 0 &&
         ppkg_build_cmd_list(cfg_info.path_cust_cfg, &cmd_list.cust_cfg) < 0)
     {
         DBG_TRACE("cmd_list.def_cfg && cmd_list.cust_cfg");
     }
-#if 0
+
     /* compare between default configuration and customer configuration, then 
      * generate a diff command list.
      */
@@ -637,7 +762,7 @@ int ppkg_gen(void)
         DBG_TRACE("return ppkg_compare_cmd_list");
         return -3;
     }
-     
+#if 0
     if (ppkg_build_cmd_list(cfg_info.path_cust_ini, &cmd_list.cust_ini) >= 0)
     {
         //TODO: write AT file
