@@ -18,6 +18,8 @@
 #define MAX_LEN_PATH        128
 #define MAX_LEN_FW_VER      64
 #define MAX_CMD_LIST_SIZE   1000
+#define MAX_LEN_CMD_TYPE    3
+
 
 #define T_FILE_READ_ONLY		"r"
 #define T_FILE_WRITE_ONLY		"w"
@@ -27,8 +29,26 @@
 #define MAX_MEM_BLOCK_LEN	52100	/* 50K bytes block */
 #define MAX_TEMP_BLOCK_LEN  10240   /* 10K bytes block */
 
+/* A command frame sample:
+ * <Command Type="GTASC" BrakeSpeedThreshold="60" DeltaSpeedThreshold="8" DeltaHeadingThreshold="5"/>
+ */
+#define CMD_FRAME_HEAD_LEN  14      /* <Command Type= */
+#define CMD_PREFIX_LEN      2       /* GT */
+
+#define LINE_CMD_FLAG       "<Command"
+#define LINE_VERSION_FLAG   "<Commands"
+#define VERSION_TITLE_STR   "FirmwareSubVersion="
 /************************************************************************************
-* Extern Function 
+* Enums
+*************************************************************************************/
+typedef enum {
+    CMD_LINE,
+    VER_LINE,
+    UNKOWN_LINE
+} line_type_enum;
+
+/************************************************************************************
+* Structs
 *************************************************************************************/
 typedef struct {
     char fm_version[MAX_LEN_FW_VER];
@@ -40,8 +60,9 @@ typedef struct {
 typedef struct _node {
     struct _node  *pre;
     struct _node  *next;
-    int     cmd_type;
-    char*   cmd_str;
+    char    cmd_type[MAX_LEN_CMD_TYPE + 1];
+    int     cmd_len;
+    char    cmd_str[1];
 } cmd_node_struct;
 
 typedef struct {
