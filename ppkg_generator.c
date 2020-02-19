@@ -345,9 +345,12 @@ static int ppkg_queue_pop(cfg_list_queue *queue_p, cmd_node_struct **node_p)
     if (NULL != queue_p->qhead)
     {
         *node_p = queue_p->qhead;
-        queue_p->qhead = queue_p->qhead->next;
-        queue_p->qhead->pre = NULL;
-        (*node_p)->next = NULL;        
+        if (queue_p->len > 1)
+        {
+            queue_p->qhead = queue_p->qhead->next;
+            queue_p->qhead->pre = NULL;
+            (*node_p)->next = NULL;  
+        }              
     }
 
     queue_p->len--;
@@ -372,6 +375,24 @@ static cmd_node_struct* ppkg_queue_get_head(cfg_list_queue *queue_p)
     }
 
     return queue_p->qhead;
+}
+
+/************************************************************************************
+* Function: ppkg_queue_get_len
+* Author @ Date: John.Wang@20200219
+* Input:
+* Return: 
+* Description: get the number of rest node in queue
+*************************************************************************************/
+static int ppkg_queue_get_len(cfg_list_queue *queue_p)
+{
+    if (NULL == queue_p)
+    {
+        DBG_TRACE("return queue_p NULL");
+        return NULL;
+    }
+
+    return queue_p->len;
 }
 
 /************************************************************************************
@@ -681,18 +702,17 @@ static int ppkg_compare_cmd_list(
         DBG_TRACE("return cust_q || def_q || diff_q NULL");
         return -1;
     }
-   
-    def_node = ppkg_queue_get_head(def_q); 
-    if (NULL == def_node)
-    {
-        DBG_TRACE("return def_node");
-        return -2;
-    }
     
-    ppkg_queue_pop(cust_q, &cust_node);
-    DBG_TRACE("cust_node:%p", cust_node);
     do
     {
+        def_node = ppkg_queue_get_head(def_q); 
+        ppkg_queue_pop(cust_q, &cust_node);
+        if (NULL == def_node || NULL == cust_node)
+        {
+            DBG_TRACE("def_node:%p, cust_node:%p", def_node, cust_node);
+            break;
+        }
+        
         do
         {
             if (0 == strcmp(cust_node->cmd_type, def_node->cmd_type) &&
@@ -709,7 +729,6 @@ static int ppkg_compare_cmd_list(
                 DBG_TRACE("->diff_node:%s", diff_node->cmd_type);
                
                 ppkg_queue_push(diff_q, diff_node);
-                def_node = ppkg_queue_get_head(def_q); 
                 break;
             }
             else
@@ -719,9 +738,10 @@ static int ppkg_compare_cmd_list(
         }
         while (def_node != NULL);        
 
+        DBG_TRACE("cust_node:%p, custq_len:%d", cust_node, ppkg_queue_get_len(cust_q));
         free(cust_node);
     }
-    while (ppkg_queue_pop(cust_q, &cust_node));
+    while (ppkg_queue_get_len(cust_q));
 
     DBG_TRACE("diff_q->len:%d", diff_q->len);
     
