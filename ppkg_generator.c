@@ -10,7 +10,8 @@
 /************************************************************************************
 * Include
 *************************************************************************************/
-#include <string.h>
+#include <unistd.h>
+
 #include "debug.h"
 #include "ppkg_generator_struct.h"
 
@@ -976,6 +977,12 @@ static void ppkg_create_file(char *path, ppkg_gen_context *cntx_p)
         return;
     }
 
+    /* if ATFILE.ini is already exist, delete it */
+    if(access(path, IS_EXIST) == 0)
+    {
+        remove(path);
+    }
+
     if ((cntx_p->temp_fp = fopen(path, T_FILE_WRITE_ADD)) == NULL)
 	{
 		return;
@@ -986,7 +993,6 @@ static void ppkg_create_file(char *path, ppkg_gen_context *cntx_p)
 	}
     
     fseek(cntx_p->temp_fp, 0, SEEK_SET);
-    
 }
 
 /************************************************************************************
@@ -1016,7 +1022,7 @@ int ppkg_gen(void)
                 cmd_list.def_cfg.len, cmd_list.cust_cfg.len, cmd_list.cust_ini.len);
     }
 
-    ppkg_create_file("ATFILE.ini", ppkg_cntx_p);
+    ppkg_create_file(AT_CFG_FILE_NAME, ppkg_cntx_p);
     ppkg_assemble_file_head(AT_FILE_HEAD_STR);
     if (ppkg_compare_cmd_list(&cmd_list.def_cfg, &cmd_list.cust_cfg, ppkg_cmp_list_cb_diff) &&
         ppkg_compare_cmd_list(&cmd_list.cust_ini, &cmd_list.diff_cfg, ppkg_cmp_list_cb_atfile))

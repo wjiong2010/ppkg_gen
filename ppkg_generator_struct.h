@@ -25,6 +25,11 @@
 #define T_FILE_WRITE_ADD		"a+"
 #define B_FILE_READ_ONLY		"rb"
 
+#define IS_EXIST        F_OK
+#define READ_EN         R_OK
+#define WRITE_EN        W_OK
+#define EXEC_EN         X_OK
+
 #define MAX_MEM_BLOCK_LEN	52100	/* 50K bytes block */
 #define MAX_TEMP_BLOCK_LEN  10240   /* 10K bytes block */
 
@@ -47,7 +52,7 @@ MetaResult[1]=OK
 #define VERSION_TITLE_STR   "FirmwareSubVersion="
 #define AT_FILE_HEAD_STR    "[ConfirMeta]\r\n\r\n"
 #define AT_FILE_TAIL_STR    "THE END"
-
+#define AT_CFG_FILE_NAME    "ATFILE.ini"
 
 /************************************************************************************
 * Enums
