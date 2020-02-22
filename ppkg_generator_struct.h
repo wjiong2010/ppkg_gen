@@ -20,7 +20,6 @@
 #define MAX_CMD_LIST_SIZE   1000
 #define MAX_LEN_CMD_TYPE    3
 
-
 #define T_FILE_READ_ONLY		"r"
 #define T_FILE_WRITE_ONLY		"w"
 #define T_FILE_WRITE_ADD		"a+"
@@ -34,14 +33,27 @@
  */
 #define CMD_FRAME_HEAD_LEN  14      /* <Command Type= */
 #define CMD_PREFIX_LEN      2       /* GT */
+#define CMD_ATGT_HEAD_LEN   5
+/*
+AtCmd[1]=
+MetaResult[1]=OK
+*/
+#define MAX_ATFILE_ITEM_FMT_LEN   64
 
 #define LINE_CMD_FLAG       "<Command"
 #define LINE_VERSION_FLAG   "<Commands"
+#define LINE_ATGT_CMD       "AT+GT"
+
 #define VERSION_TITLE_STR   "FirmwareSubVersion="
+#define AT_FILE_HEAD_STR    "[ConfirMeta]\r\n\r\n"
+#define AT_FILE_TAIL_STR    "THE END"
+
+
 /************************************************************************************
 * Enums
 *************************************************************************************/
 typedef enum {
+    CFG_LINE,
     CMD_LINE,
     VER_LINE,
     UNKOWN_LINE
@@ -86,6 +98,11 @@ typedef struct
 	char *data;
 } circal_buffer;
 
+typedef struct 
+{
+    FILE *temp_fp;
+    int   cmd_cnt;
+} ppkg_gen_context;
 
 #endif /* __PPKG_GENERATOR_STRUCT_H__ */
 
