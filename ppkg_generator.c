@@ -24,6 +24,11 @@ static char *multi_cmd_type[] = {
     "GEO", "PEO", "CLT", "FFC", "IOB", "CMD", "UDF", "TMP", "FSC", NULL
 };
 
+static char *ignore_cmd_type[] = {
+    "RTO", "UPD", NULL
+};
+
+
 static cfg_info_struct cfg_info;
 static cmd_list_struct cmd_list;
 static circal_buffer   cir_buff;
@@ -702,6 +707,31 @@ static void ppkg_cmd_list_init(cmd_list_struct *list_p)
 }
 
 /************************************************************************************
+* Function: ppkg_is_ignore_cmd
+* Author @ Date: John.Wang@20200224
+* Input:
+* Return: TRUE: is ignore command FALSE is not...
+* Description: 
+*************************************************************************************/
+static bool ppkg_is_ignore_cmd(const char* cmd_type)
+{
+    int i = 0;
+    bool ret = FALSE;
+    
+    while (NULL != ignore_cmd_type[i])
+    {
+        if (strcmp(ignore_cmd_type[i++], cmd_type) == 0)
+        {
+            ret = TRUE;
+            break;
+        }
+    }
+    //DBG_TRACE("ret:%d, [%s,%s]", ret, multi_cmd_type[i], cmd_type);    
+
+    return ret;
+}
+
+/************************************************************************************
 * Function: ppkg_cmp_list_cb_diff
 * Author @ Date: John.Wang@20200216
 * Input:
@@ -716,6 +746,14 @@ static int ppkg_cmp_list_cb_diff(cmd_node_struct *def_node, cmd_node_struct *cus
     
     do
     {
+        if (0 == strcmp(ppkg_cntx_p->pre_cmd_type, cust_node->cmd_type) ||
+            ppkg_is_ignore_cmd(cust_node->cmd_type)
+            )
+        {
+            DBG_TRACE("same with pre command or ignore command");
+            break;
+        }
+        
         if (0 == strcmp(cust_node->cmd_type, def_node->cmd_type) &&
             0 != strcmp(cust_node->cmd_str, def_node->cmd_str)
             )
@@ -728,6 +766,7 @@ static int ppkg_cmp_list_cb_diff(cmd_node_struct *def_node, cmd_node_struct *cus
             }
             memset(diff_node, 0, (sizeof(cmd_node_struct)));
             strcpy(diff_node->cmd_type, cust_node->cmd_type);
+            strcpy(ppkg_cntx_p->pre_cmd_type, cust_node->cmd_type);
             DBG_TRACE("->diff_node:%s", diff_node->cmd_type);
            
             ppkg_queue_push(&cmd_list.diff_cfg, diff_node);
@@ -829,6 +868,50 @@ static void ppkg_write_buffer_to_file(FILE *fp, char *buff_p, int len)
 }
 
 /************************************************************************************
+* Function: ppkg_assemble_single_command
+* Author @ Date: John.Wang@20200222
+* Input:
+* Return: void
+* Description:  assemble atfile 
+*************************************************************************************/
+static int ppkg_assemble_single_command(cmd_node_struct *ini_node)
+{
+    char *p = NULL;
+    int mlc_size = 0;
+    int len = 0;
+
+    mlc_size = ini_node->cmd_len + MAX_ATFILE_ITEM_FMT_LEN;
+    
+    if ((p = (char *)malloc(mlc_size)) == NULL)
+    {
+        DBG_TRACE("malloc failed");
+        return 0;
+    }
+    DBG_TRACE("ppkg_assemble_single_command p:%p, mlc_size=%d, cmd_type:%s"
+        , p, mlc_size, ini_node->cmd_type);
+    memset(p, 0, mlc_size);
+    
+    len = snprintf(p, mlc_size, "AtCmd[%d]=%s", 
+                ppkg_cntx_p->cmd_cnt, ini_node->cmd_str);
+    len += snprintf((char*)(p + len), mlc_size - len,
+                "MetaResult[%d]=OK\r\n\r\n",
+                ppkg_cntx_p->cmd_cnt);
+    ppkg_cntx_p->cmd_cnt++;
+    DBG_TRACE("->atfile line:%s, len=%d", p, len);
+    if (ppkg_circal_buff_get_valid_space(&cir_buff) < len)
+    {
+        /* not enough space for buffer */
+        ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, cir_buff.data, cir_buff.valid_bytes);
+        ppkg_reset_circal_buff(&cir_buff);
+    }
+    ppkg_write_circal_buff(&cir_buff, p, len);
+
+    free(p);
+
+    return len;
+}
+
+/************************************************************************************
 * Function: ppkg_assemble_atfile_body
 * Author @ Date: John.Wang@20200222
 * Input:
@@ -837,42 +920,28 @@ static void ppkg_write_buffer_to_file(FILE *fp, char *buff_p, int len)
 *************************************************************************************/
 static int ppkg_assemble_atfile_body(cmd_node_struct *ini_node)
 {
-    char *p = NULL;
+    
     int len = 0;
-    int mlc_size = 0;
+    char *first_cmd_type = NULL;
 
     if (NULL == ini_node)
     {
         return 0;
     }
-    mlc_size = ini_node->cmd_len + MAX_ATFILE_ITEM_FMT_LEN;
-    
-    if ((p = (char *)malloc(mlc_size)) == NULL)
-    {
-        DBG_TRACE("malloc failed");
-        return 0;
-    }
-    memset(p, 0, mlc_size);
-
-    DBG_TRACE("ppkg_assemble_atfile_body p:%p, mlc_size=%d, cmd_type:%s"
-        , p, mlc_size, ini_node->cmd_type);
     
     if (!ppkg_is_multi_cmd(ini_node->cmd_type))
     {
-        len = snprintf(p, mlc_size, "AtCmd[%d]=%s", 
-                    ppkg_cntx_p->cmd_cnt, ini_node->cmd_str);
-        len += snprintf((char*)(p + len), mlc_size - len,
-                    "MetaResult[%d]=OK\r\n\r\n",
-                    ppkg_cntx_p->cmd_cnt);
-        ppkg_cntx_p->cmd_cnt++;
-        DBG_TRACE("->atfile line:%s, len=%d", p, len);
-        if (ppkg_circal_buff_get_valid_space(&cir_buff) < len)
+        len = ppkg_assemble_single_command(ini_node);
+    }
+    else
+    {
+        first_cmd_type = ini_node->cmd_type;
+        do
         {
-            /* not enough space for buffer */
-            ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, cir_buff.data, cir_buff.valid_bytes);
-            ppkg_reset_circal_buff(&cir_buff);
+            len = ppkg_assemble_single_command(ini_node);
+            ini_node = ini_node->next;
         }
-        ppkg_write_circal_buff(&cir_buff, p, len);
+        while (ini_node != NULL && (strcmp(first_cmd_type, ini_node->cmd_type) == 0));
     }
 
     return len;
@@ -897,12 +966,13 @@ static int ppkg_cmp_list_cb_atfile(cmd_node_struct *ini_node, cmd_node_struct *d
     
     do
     {
+    #if 0
         if (ppkg_is_multi_cmd(diff_node->cmd_type))
         {
             DBG_TRACE("multi-command, return");
             break;
         }
-        
+    #endif
         if (0 == strcmp(diff_node->cmd_type, ini_node->cmd_type))
         {
             ppkg_assemble_atfile_body(ini_node);

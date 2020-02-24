@@ -105,8 +105,9 @@ typedef struct
 
 typedef struct 
 {
-    FILE *temp_fp;
-    int   cmd_cnt;
+    FILE    *temp_fp;
+    int     cmd_cnt;
+    char    pre_cmd_type[MAX_LEN_CMD_TYPE + 1];
 } ppkg_gen_context;
 
 #endif /* __PPKG_GENERATOR_STRUCT_H__ */
