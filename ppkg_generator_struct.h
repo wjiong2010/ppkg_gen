@@ -78,6 +78,7 @@ typedef struct _node {
     struct _node  *pre;
     struct _node  *next;
     char    cmd_type[MAX_LEN_CMD_TYPE + 1];
+    bool    is_multi_cmd;
     int     cmd_len;
     char    cmd_str[1];
 } cmd_node_struct;

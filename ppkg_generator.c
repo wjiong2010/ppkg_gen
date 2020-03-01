@@ -38,7 +38,7 @@ static ppkg_gen_context *ppkg_cntx_p = &ppkg_context_st;
 /************************************************************************************
 * Types
 *************************************************************************************/
-typedef int (*cb_func)(cmd_node_struct *cust_node, cmd_node_struct *def_node);
+typedef int (*cb_func)(cfg_list_queue *cmp_q, cmd_node_struct *cust_node, cmd_node_struct *def_node);
 
 /************************************************************************************
 * Process
@@ -388,6 +388,38 @@ static int ppkg_queue_pop(cfg_list_queue *queue_p, cmd_node_struct **node_p)
 }
 
 /************************************************************************************
+* Function: ppkg_queue_del
+* Author @ Date: John.Wang@20200216
+* Input:
+* Return: length of queue
+* Description: delete node_p in queue
+*************************************************************************************/
+static int ppkg_queue_del(cfg_list_queue *queue_p, cmd_node_struct *node_p)
+{
+    if (NULL == queue_p || queue_p->len == 0)
+    {
+        DBG_TRACE("return queue_p NULL");
+        return -1;
+    }
+
+    if (NULL != node_p->pre)
+    {
+        node_p->pre->next = node_p->next;             
+    }
+
+    if (NULL != node_p->next)
+    {
+        node_p->next->pre = node_p->pre;
+    }
+
+    queue_p->len--;
+    //DBG_TRACE("queue_p->len:%d, *node_p:%p", queue_p->len, *node_p);
+
+    return queue_p->len;
+}
+
+
+/************************************************************************************
 * Function: ppkg_queue_get_head
 * Author @ Date: John.Wang@20200216
 * Input:
@@ -563,6 +595,31 @@ static line_type_enum ppkg_get_buff_line_type(const char *cmd_str, int cmd_len)
 }
 
 /************************************************************************************
+* Function: ppkg_is_multi_cmd
+* Author @ Date: John.Wang@20200222
+* Input:
+* Return: TRUE: is multi command FALSE is not...
+* Description: 
+*************************************************************************************/
+static bool ppkg_is_multi_cmd(const char* cmd_type)
+{
+    int i = 0;
+    bool ret = FALSE;
+    
+    while (NULL != multi_cmd_type[i])
+    {
+        if (strcmp(multi_cmd_type[i++], cmd_type) == 0)
+        {
+            ret = TRUE;
+            break;
+        }
+    }
+    //DBG_TRACE("ret:%d, [%s,%s]", ret, multi_cmd_type[i], cmd_type);    
+
+    return ret;
+}
+
+/************************************************************************************
 * Function: ppkg_analysis_buff_line
 * Author @ Date: John.Wang@20200222
 * Input:
@@ -605,6 +662,7 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, cfg_list_queue *queue_p)
         }
         memset(node_p, 0, (sizeof(cmd_node_struct) + ret));
         parsed_len = ppkg_get_cmd_type(node_p->cmd_type, temp_buff, line_type);
+        node_p->is_multi_cmd = ppkg_is_multi_cmd(node_p->cmd_type);
         
         if (CFG_LINE == line_type)
         {
@@ -732,6 +790,29 @@ static bool ppkg_is_ignore_cmd(const char* cmd_type)
 }
 
 /************************************************************************************
+* Function: ppkg_cmd_compare
+* Author @ Date: John.Wang@20200301
+* Input:
+* Return: TRUE: is the same command FALSE is not...
+* Description: 
+*************************************************************************************/
+static bool ppkg_cmd_compare(cmd_node_struct *def_node, cmd_node_struct *cust_node)
+{
+    int i = 0;
+    bool ret = FALSE;
+    
+    if (0 == strcmp(cust_node->cmd_type, def_node->cmd_type) &&
+        0 != strcmp(cust_node->cmd_str, def_node->cmd_str)
+        )
+    {
+    }
+    //DBG_TRACE("ret:%d, [%s,%s]", ret, multi_cmd_type[i], cmd_type);    
+
+    return ret;
+}
+
+
+/************************************************************************************
 * Function: ppkg_cmp_list_cb_diff
 * Author @ Date: John.Wang@20200216
 * Input:
@@ -739,18 +820,16 @@ static bool ppkg_is_ignore_cmd(const char* cmd_type)
 * Description: a callback function to compare between default configuration and customer 
 *              configuration, then generate a diff command list.
 *************************************************************************************/
-static int ppkg_cmp_list_cb_diff(cmd_node_struct *def_node, cmd_node_struct *cust_node)
+static int ppkg_cmp_list_cb_diff(cfg_list_queue *def_q, cmd_node_struct *def_node, cmd_node_struct *cust_node)
 {
     cmd_node_struct *diff_node = NULL;
     int ret = 0;
     
     do
     {
-        if (0 == strcmp(ppkg_cntx_p->pre_cmd_type, cust_node->cmd_type) ||
-            ppkg_is_ignore_cmd(cust_node->cmd_type)
-            )
+        if (ppkg_is_ignore_cmd(cust_node->cmd_type))
         {
-            DBG_TRACE("same with pre command or ignore command");
+            DBG_TRACE("ignore command");
             break;
         }
         
@@ -766,16 +845,20 @@ static int ppkg_cmp_list_cb_diff(cmd_node_struct *def_node, cmd_node_struct *cus
             }
             memset(diff_node, 0, (sizeof(cmd_node_struct)));
             strcpy(diff_node->cmd_type, cust_node->cmd_type);
-            strcpy(ppkg_cntx_p->pre_cmd_type, cust_node->cmd_type);
             DBG_TRACE("->diff_node:%s", diff_node->cmd_type);
            
             ppkg_queue_push(&cmd_list.diff_cfg, diff_node);
             ret = cmd_list.diff_cfg.len;
+
+            ppkg_queue_del(def_q, def_node);
+            free(def_node);
+
             break;
         }
         else
         {
             def_node = def_node->next;
+            
         }
     }
     while (def_node != NULL);
@@ -816,9 +899,10 @@ static int ppkg_compare_cmd_list(
             break;
         }
 
-        ret = cb(cmp_node, opr_node);
+        ret = cb(cmp_q, cmp_node, opr_node);
         
-        DBG_TRACE("opr_node->cmd_type:%s, opr_q_len:%d, ret=%d", opr_node->cmd_type, ppkg_queue_get_len(opr_q), ret);
+        DBG_TRACE("opr_node->cmd_type:%s, opr_q_len:%d, ret=%d"
+                , opr_node->cmd_type, ppkg_queue_get_len(opr_q), ret);
         if (opr_node != NULL)
             free(opr_node);
     }
@@ -826,31 +910,6 @@ static int ppkg_compare_cmd_list(
 
     DBG_TRACE("ret:%d", ret);
     
-    return ret;
-}
-
-/************************************************************************************
-* Function: ppkg_is_multi_cmd
-* Author @ Date: John.Wang@20200222
-* Input:
-* Return: TRUE: is multi command FALSE is not...
-* Description: 
-*************************************************************************************/
-static bool ppkg_is_multi_cmd(const char* cmd_type)
-{
-    int i = 0;
-    bool ret = FALSE;
-    
-    while (NULL != multi_cmd_type[i])
-    {
-        if (strcmp(multi_cmd_type[i++], cmd_type) == 0)
-        {
-            ret = TRUE;
-            break;
-        }
-    }
-    //DBG_TRACE("ret:%d, [%s,%s]", ret, multi_cmd_type[i], cmd_type);    
-
     return ret;
 }
 
@@ -918,20 +977,23 @@ static int ppkg_assemble_single_command(cmd_node_struct *ini_node)
 * Return: void
 * Description:  assemble atfile 
 *************************************************************************************/
-static int ppkg_assemble_atfile_body(cmd_node_struct *ini_node)
+static int ppkg_assemble_atfile_body(cfg_list_queue *ini_q, cmd_node_struct *ini_node)
 {
     
     int len = 0;
     char *first_cmd_type = NULL;
+    cmd_node_struct *del_node = NULL;
 
     if (NULL == ini_node)
     {
         return 0;
     }
     
-    if (!ppkg_is_multi_cmd(ini_node->cmd_type))
+    if (!ini_node->is_multi_cmd)
     {
         len = ppkg_assemble_single_command(ini_node);
+        ppkg_queue_del(ini_q, ini_node);
+        free(ini_node);
     }
     else
     {
@@ -939,7 +1001,11 @@ static int ppkg_assemble_atfile_body(cmd_node_struct *ini_node)
         do
         {
             len = ppkg_assemble_single_command(ini_node);
+            del_node = ini_node;
             ini_node = ini_node->next;
+
+            ppkg_queue_del(ini_q, del_node);
+            free(del_node);
         }
         while (ini_node != NULL && (strcmp(first_cmd_type, ini_node->cmd_type) == 0));
     }
@@ -954,7 +1020,7 @@ static int ppkg_assemble_atfile_body(cmd_node_struct *ini_node)
 * Return: length of atfile
 * Description: 
 *************************************************************************************/
-static int ppkg_cmp_list_cb_atfile(cmd_node_struct *ini_node, cmd_node_struct *diff_node)
+static int ppkg_cmp_list_cb_atfile(cfg_list_queue *ini_q, cmd_node_struct *ini_node, cmd_node_struct *diff_node)
 {
     bool new_cmd = TRUE;
 
@@ -975,7 +1041,7 @@ static int ppkg_cmp_list_cb_atfile(cmd_node_struct *ini_node, cmd_node_struct *d
     #endif
         if (0 == strcmp(diff_node->cmd_type, ini_node->cmd_type))
         {
-            ppkg_assemble_atfile_body(ini_node);
+            ppkg_assemble_atfile_body(ini_q, ini_node);
             new_cmd = FALSE;
             break;
         }
