@@ -19,6 +19,8 @@
 #define MAX_LEN_FW_VER      64
 #define MAX_CMD_LIST_SIZE   1000
 #define MAX_LEN_CMD_TYPE    3
+#define MAX_TEMP_BUFF_LEN   512
+#define MAX_COMMAND_NUM     0x0fffffff
 
 #define T_FILE_READ_ONLY		"r"
 #define T_FILE_WRITE_ONLY		"w"
@@ -32,6 +34,7 @@
 
 #define MAX_MEM_BLOCK_LEN	52100	/* 50K bytes block */
 #define MAX_TEMP_BLOCK_LEN  10240   /* 10K bytes block */
+#define MAX_ID_LIST_LEN     1024    
 
 /* A command frame sample:
  * <Command Type="GTASC" BrakeSpeedThreshold="60" DeltaSpeedThreshold="8" DeltaHeadingThreshold="5"/>
@@ -53,7 +56,7 @@ MetaResult[1]=OK
 #define AT_FILE_HEAD_STR    "[ConfirMeta]\r\n\r\n"
 #define AT_FILE_TAIL_STR    "THE END"
 #define AT_CFG_FILE_NAME    "ATFILE.ini"
-
+#define COMMA_SEPARATOR     ','
 /************************************************************************************
 * Enums
 *************************************************************************************/
@@ -74,11 +77,18 @@ typedef struct {
     char path_cust_ini[MAX_LEN_PATH];
 } cfg_info_struct;
 
+typedef struct {
+    int     diff_id_num;
+    int     *diff_id_list;
+} cmd_diff_data;
+
 typedef struct _node {
     struct _node  *pre;
     struct _node  *next;
     char    cmd_type[MAX_LEN_CMD_TYPE + 1];
     bool    is_multi_cmd;
+    int     id;             /* Only for multi-command */
+    cmd_diff_data   diff_data;
     int     cmd_len;
     char    cmd_str[1];
 } cmd_node_struct;
@@ -95,6 +105,17 @@ typedef struct {
     cfg_list_queue cust_ini;
     cfg_list_queue diff_cfg;
 } cmd_list_struct;
+
+typedef struct
+{   
+    char    *cmd_name;
+    bool    ignored;
+    char    *first_param;
+    int     id_pos;             /* for multi-command, means how many ',' before <id>. 
+                                 * for single-command, always be 0
+                                 */
+    char    *key_paras;
+} cmd_attribute_struct;
 
 typedef struct 
 {

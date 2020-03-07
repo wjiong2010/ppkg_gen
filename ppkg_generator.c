@@ -20,14 +20,26 @@
 *************************************************************************************/
 static char memory_block[MAX_MEM_BLOCK_LEN] = {0};
 static char temp_buff[MAX_TEMP_BLOCK_LEN] = {0};
-static char *multi_cmd_type[] = {
-    "GEO", "PEO", "CLT", "FFC", "IOB", "CMD", "UDF", "TMP", "FSC", NULL
-};
+static int  command_id_list[MAX_ID_LIST_LEN] = {0};
 
-static char *ignore_cmd_type[] = {
-    "RTO", "UPD", NULL
+static cmd_attribute_struct command_attr_table[] =
+{
+    /* cmd_name, ignored, first_param, id_pos, key parameters */
+    {  "GEO",    FALSE,   "GEOID",      1,      "Mode" },
+    {  "PEO",    FALSE,   "GEOID",      1,      "Mode" },
+    {  "CLT",    FALSE,   "GroupID",    1,      NULL },
+    {  "FFC",    FALSE,   "Priority",   1,      NULL },
+    {  "IOB",    FALSE,   "IOBID",      1,      NULL },
+    {  "CMD",    FALSE,   "Mode",       2,      "Mode,CommandString" },
+    {  "UDF",    FALSE,   "Mode",       2,      "Mode,InputIdMask" },
+    {  "TMP",    FALSE,   "Mode",       1,      "Mode,SensorID" },
+    {  "FSC",    FALSE,   "TableID",    2,      "SensorType,Enable" },
+    {  "RTO",    TRUE,    NULL,         0,      NULL  },
+    {  "UPD",    TRUE,    NULL,         0,      NULL  },
+    {  "FVR",    TRUE,    NULL,         0,      NULL  },
+    {  "QSS",    TRUE,    NULL,         0,      NULL  },
+    {  NULL,     TRUE,    NULL,         0,      NULL }
 };
-
 
 static cfg_info_struct cfg_info;
 static cmd_list_struct cmd_list;
@@ -382,7 +394,7 @@ static int ppkg_queue_pop(cfg_list_queue *queue_p, cmd_node_struct **node_p)
     }
 
     queue_p->len--;
-    //DBG_TRACE("queue_p->len:%d, *node_p:%p", queue_p->len, *node_p);
+   // DBG_TRACE("queue_p->len:%d, *node_p:%p", queue_p->len, *node_p);
 
     return queue_p->len;
 }
@@ -396,24 +408,37 @@ static int ppkg_queue_pop(cfg_list_queue *queue_p, cmd_node_struct **node_p)
 *************************************************************************************/
 static int ppkg_queue_del(cfg_list_queue *queue_p, cmd_node_struct *node_p)
 {
+    cmd_node_struct *p = NULL;
     if (NULL == queue_p || queue_p->len == 0)
     {
         DBG_TRACE("return queue_p NULL");
         return -1;
     }
 
-    if (NULL != node_p->pre)
+    p = queue_p->qhead;
+    while (p != NULL)
     {
-        node_p->pre->next = node_p->next;             
-    }
+        DBG_TRACE("p:%p, node_p:%p", p, node_p);
+        if (node_p == p)
+        {
+            if (NULL != p->pre)
+            {
+                DBG_TRACE("p->pre:%p", p->pre);
+                p->pre->next = p->next;             
+            }
 
-    if (NULL != node_p->next)
-    {
-        node_p->next->pre = node_p->pre;
+            if (NULL != p->next)
+            {
+                DBG_TRACE("p->next:%p", p->next);
+                p->next->pre = p->pre;
+            }
+            queue_p->len--;
+            break;
+        }
+        p = p->next;
     }
-
-    queue_p->len--;
-    //DBG_TRACE("queue_p->len:%d, *node_p:%p", queue_p->len, *node_p);
+       
+    DBG_TRACE("queue_p->len:%d, node_p:%p", queue_p->len, node_p);
 
     return queue_p->len;
 }
@@ -434,6 +459,8 @@ static cmd_node_struct* ppkg_queue_get_head(cfg_list_queue *queue_p)
         return NULL;
     }
 
+    //DBG_TRACE("queue_p->qhead:%p, next:%p", queue_p->qhead, queue_p->qhead->next);
+    
     return queue_p->qhead;
 }
 
@@ -449,7 +476,7 @@ static int ppkg_queue_get_len(cfg_list_queue *queue_p)
     if (NULL == queue_p)
     {
         DBG_TRACE("return queue_p NULL");
-        return NULL;
+        return 0;
     }
 
     return queue_p->len;
@@ -554,7 +581,8 @@ static int ppkg_get_cmd_type(char *cmd_type, const char *cmd_str, line_type_enum
         memcpy(cmd_type, (void*)(cmd_str + CMD_ATGT_HEAD_LEN), MAX_LEN_CMD_TYPE);
         return 0;
     }
-    
+
+    return 0;
 }
 
 /************************************************************************************
@@ -593,7 +621,7 @@ static line_type_enum ppkg_get_buff_line_type(const char *cmd_str, int cmd_len)
     
     return line_type;
 }
-
+#if 0
 /************************************************************************************
 * Function: ppkg_is_multi_cmd
 * Author @ Date: John.Wang@20200222
@@ -606,28 +634,112 @@ static bool ppkg_is_multi_cmd(const char* cmd_type)
     int i = 0;
     bool ret = FALSE;
     
-    while (NULL != multi_cmd_type[i])
+    while (NULL != command_attr_table[i].cmd_name)
     {
-        if (strcmp(multi_cmd_type[i++], cmd_type) == 0)
+        if (strcmp(command_attr_table[i].cmd_name, cmd_type) == 0)
         {
-            ret = TRUE;
+            ret = (bool)(command_attr_table[i].id_pos != 0);
             break;
         }
+        i++;
     }
-    //DBG_TRACE("ret:%d, [%s,%s]", ret, multi_cmd_type[i], cmd_type);    
+    //DBG_TRACE("ret:%d, [%s,%s]", ret, command_attr_table[i].cmd_name, cmd_type);    
 
     return ret;
 }
-
+#endif
 /************************************************************************************
-* Function: ppkg_analysis_buff_line
+* Function: ppkg_get_multi_cmd_id_position
 * Author @ Date: John.Wang@20200222
 * Input:
 * Return: 
 * Description: 
 *************************************************************************************/
-static void ppkg_analysis_buff_line(const char *cmd_str, int cmd_len)
+static int ppkg_get_multi_cmd_id_position(const char* cmd_type)
 {
+    int i = 0;
+    int ret_val = 0;
+    
+    while (NULL != command_attr_table[i].cmd_name)
+    {
+        if (strcmp(command_attr_table[i].cmd_name, cmd_type) == 0)
+        {
+            ret_val = command_attr_table[i].id_pos;
+            break;
+        }
+        i++;
+    }
+
+    return ret_val;
+}
+
+/************************************************************************************
+* Function: ppkg_get_cmd_attr
+* Author @ Date: John.Wang@20200305
+* Input:
+* Return: 
+* Description: 
+*************************************************************************************/
+static cmd_attribute_struct *ppkg_get_cmd_attr(const char* cmd_type)
+{
+    int i = 0;
+    cmd_attribute_struct *ret_p = NULL;
+    
+    while (NULL != command_attr_table[i].cmd_name)
+    {
+        if (strcmp(command_attr_table[i].cmd_name, cmd_type) == 0)
+        {
+            ret_p = &command_attr_table[i];
+            break;
+        }
+        i++;
+    }
+    DBG_TRACE("i:%d, cmd_type:%s, ret_p:%p"
+                , i, cmd_type, ret_p);
+
+    return ret_p;
+}
+
+
+/************************************************************************************
+* Function: ppkg_get_multi_cmd_id
+* Author @ Date: John.Wang@20200222
+* Input:
+* Return: 
+* Description: 
+*************************************************************************************/
+static int ppkg_get_multi_cmd_id(const char *cmd_str, int cmd_len, int id_pos)
+{
+    char para_buff[8] = {0};
+    char *p, *q, *k;
+    int i = 0;
+
+    p = cmd_str;
+    q = k = NULL;
+    while(NULL != (q = strchr(p, COMMA_SEPARATOR)))
+    {
+        /* AT+GTFSC=gv300,,id,20,0,100,,0,,,,,,,,,FFFF$ */
+        if (i < id_pos)
+        {
+            p = q + 1;
+            k = p;
+            i++; 
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    if (k && q - k > 0)
+    {
+        memcpy(para_buff, (void*)k, q - k);
+        return atoi(para_buff);
+    }
+    else
+    {
+        return -1;
+    }
 }
 
 /************************************************************************************
@@ -643,6 +755,7 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, cfg_list_queue *queue_p)
     line_type_enum line_type = UNKOWN_LINE;
     int parsed_len = 0;
     int ret = 0;
+    int id_pos = 0;
 
     if (NULL == cir_buf || NULL == queue_p)
     {
@@ -662,16 +775,19 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, cfg_list_queue *queue_p)
         }
         memset(node_p, 0, (sizeof(cmd_node_struct) + ret));
         parsed_len = ppkg_get_cmd_type(node_p->cmd_type, temp_buff, line_type);
-        node_p->is_multi_cmd = ppkg_is_multi_cmd(node_p->cmd_type);
-        
+        id_pos = ppkg_get_multi_cmd_id_position(node_p->cmd_type);
+        node_p->is_multi_cmd = (bool)(id_pos != 0);//ppkg_is_multi_cmd(node_p->cmd_type);
         if (CFG_LINE == line_type)
         {
             /* Skip command type and right " */
             parsed_len += 4;
         }
         node_p->cmd_len = ret - parsed_len;
-        
         memcpy(node_p->cmd_str, &temp_buff[parsed_len], node_p->cmd_len);
+        if (CMD_LINE == line_type && node_p->is_multi_cmd)
+        {
+            node_p->id = ppkg_get_multi_cmd_id(node_p->cmd_str, node_p->cmd_len, id_pos);
+        }
         DBG_TRACE("->cmd_type:%s, %d, %s", node_p->cmd_type, node_p->cmd_len, node_p->cmd_str);
         ppkg_queue_push(queue_p, node_p);
     }
@@ -700,12 +816,6 @@ static int ppkg_build_cmd_list(char* path, cfg_list_queue *queue_p)
 {
     FILE *read_fp;
     int ret = 0;
-    int cvt_ret = 0;
-    #if 0
-    int last_package = 0;
-    int rd_pos = 0;
-    int wr_pos = 0;
-    #endif
     
     if (NULL == path || NULL == queue_p)
     {
@@ -776,11 +886,11 @@ static bool ppkg_is_ignore_cmd(const char* cmd_type)
     int i = 0;
     bool ret = FALSE;
     
-    while (NULL != ignore_cmd_type[i])
+    while (NULL != command_attr_table[i].cmd_name)
     {
-        if (strcmp(ignore_cmd_type[i++], cmd_type) == 0)
+        if (strcmp(command_attr_table[i++].cmd_name, cmd_type) == 0)
         {
-            ret = TRUE;
+            ret = command_attr_table[i++].ignored;
             break;
         }
     }
@@ -790,21 +900,333 @@ static bool ppkg_is_ignore_cmd(const char* cmd_type)
 }
 
 /************************************************************************************
+* Function: ppkg_get_key_word
+* Author @ Date: John.Wang@20200306
+* Input:
+* Return: length of key word, 0 means no key word found
+* Description: get key word from key_paras, key words is seperated by ','
+*************************************************************************************/
+static int ppkg_get_key_word(char *key, const char* key_paras)
+{
+    char *end_pos = NULL;
+    int len = 0;
+
+    if (0 == strlen(key_paras)) return 0;
+
+    end_pos = strchr(key_paras, COMMA_SEPARATOR);
+    if (end_pos)
+    {
+        len = end_pos - key_paras;
+    }
+    else
+    {
+        /* Not found ',' means only one word */
+        len = strlen(key_paras);
+    }
+    
+    if (len) memcpy(key, key_paras, len);
+
+    return len;
+}
+
+/************************************************************************************
+* Function: ppkg_insert_command_id
+* Author @ Date: John.Wang@20200306
+* Input:
+* Return: 
+* Description: 
+*************************************************************************************/
+static void ppkg_insert_command_id(int id, cmd_diff_data *diff_data)
+{
+    int i = 0;
+    
+    for (; i < MAX_ID_LIST_LEN; i++)
+    {
+        if (i >= diff_data->diff_id_num)
+        {
+            diff_data->diff_id_list[diff_data->diff_id_num] = id;
+            diff_data->diff_id_num++;
+            break;
+        }
+        if (id == diff_data->diff_id_list[i]) break;
+    }
+}
+
+/************************************************************************************
+* Function: ppkg_cmd_keyword_compare
+* Author @ Date: John.Wang@20200305
+* Input:
+* Return: id of sub command, for
+* Description: 
+*************************************************************************************/
+static int ppkg_get_key_param_info(char *cmd_str, 
+                    const char *key, int *id, char *key_value)
+{
+    char *p, *q, *k;
+    int key_len = strlen(key);
+    char id_str[8] = {0};
+
+    q = k = p = cmd_str;
+
+    /* MinThreshold1="0" 
+     * MaxSpeed="0"
+     */
+    //DBG_TRACE("p:%s, key_word:%s", p, key);
+    while(NULL != (q = strstr(p, key)))
+    {
+        /* For example: keyword is "Mode" we found "FRIMode0" 
+         * this word should be skipped
+         */
+        if (*(q -1) != ' ')
+        {
+            p = q + key_len;
+            continue;
+        }
+
+        q += key_len;
+        k = strchr(q, '=');
+        if (k && k - q > 0)
+        {
+            memcpy(id_str, q, k - q);
+            if (id) *id = atoi(id_str);
+        }
+        else 
+        {
+            if (id) *id = -1;
+        }
+
+        /* get key value, skip = */
+        q = k + 1;
+        k = strchr(q + 1, '"');
+        if (k && k - q > 0)
+        {
+            /* Include the last " */
+            k++;
+            memcpy(key_value, q, k - q); 
+        }
+
+        break;
+    }
+
+    return k - cmd_str;
+}
+
+/************************************************************************************
+* Function: ppkg_cmd_keyword_compare
+* Author @ Date: John.Wang@20200305
+* Input:
+* Return: id of sub command, for
+* Description: 
+*************************************************************************************/
+static bool ppkg_cmd_keyword_compare(char *key, char *def_str, 
+                        char *cust_str, cmd_diff_data *diff_data)
+{
+    int id = -1;
+    char def_value[MAX_TEMP_BUFF_LEN] = {0};
+    char cust_value[MAX_TEMP_BUFF_LEN] = {0};
+    int l1, l2;
+    int def_len = 0;
+    int cust_len = 0;
+    bool ret = TRUE;
+
+    while((l1 = ppkg_get_key_param_info((char*)(def_str + def_len), key, NULL, def_value)) > 0 && 
+          (l2 = ppkg_get_key_param_info((char*)(cust_str + cust_len), key, &id, cust_value)) > 0)
+    {
+        def_len += l1;
+        cust_len += l2;
+        DBG_TRACE("def_len:%d, cust_len:%d, def_value:%s, cust_value:%s, id:%d"
+            , def_len, cust_len, def_value, cust_value, id);
+        if (strcmp(def_value, cust_value))
+        {
+            if (id >= 0)
+                ppkg_insert_command_id(id, diff_data);
+
+            ret = FALSE;
+            //break;
+        }
+        memset(def_value, 0, MAX_TEMP_BUFF_LEN);
+        memset(cust_value, 0, MAX_TEMP_BUFF_LEN);
+    }
+
+    return ret;
+}
+
+/************************************************************************************
+* Function: ppkg_get_multi_cmd_str
+* Author @ Date: John.Wang@20200307
+* Input:
+* Return: 
+* Description: 
+*************************************************************************************/
+static bool ppkg_get_multi_cmd_str(char *flag, char *sub_str, int *id, char *cmd_str)
+{
+    char *p, *q, *k;
+    int flag_len = strlen(flag);
+    char id_str[8] = {0};
+    int ret_len = 0;
+    
+    q = p = cmd_str;
+    k = NULL;
+
+    /* MinThreshold1="0" 
+     * MaxSpeed="0"
+     */
+    while(NULL != (q = strstr(p, flag)))
+    {
+        /* For example: keyword is "Mode" we found "FRIMode0" 
+         * this word should be skipped
+         */
+        if (*(q - 1) != ' ')
+        {
+            p = q + flag_len;
+            continue;
+        }
+
+        if (!k)
+        {
+            p = q + flag_len;
+            k = q; /* record the head of sub_str to k */
+        }
+        else
+        {
+            break;
+        }
+    }
+   
+    if (k)
+    {
+        /* found head */
+        if (q)
+        {
+            /* found next sub_str head */
+            ret_len = (int)(q - k);
+        }
+        else
+        {
+            /* not found next sub_str head, so we conside the total cmd_str as a sub_str */
+            ret_len = strlen((const char*)k);
+        }
+        memcpy(sub_str, k, ret_len);
+
+        /* pick out ID, GEOID0="0" */
+        q = k + flag_len;
+        k = strchr(q, '=');
+        if (k && k - q > 0)
+        {
+            memcpy(id_str, q, k - q);
+            if (id) *id = atoi(id_str);
+        }
+        else 
+        {
+            if (id) *id = -1;
+        }
+    }
+    else
+    {
+        /* not found head, we got nothing from cmd_str */
+        ret_len = 0;
+    }
+    
+    return ret_len;
+}
+
+/************************************************************************************
 * Function: ppkg_cmd_compare
-* Author @ Date: John.Wang@20200301
+* Author @ Date: John.Wang@20200305
 * Input:
 * Return: TRUE: is the same command FALSE is not...
 * Description: 
 *************************************************************************************/
-static bool ppkg_cmd_compare(cmd_node_struct *def_node, cmd_node_struct *cust_node)
+static bool ppkg_cmd_compare(cmd_node_struct *def_node
+                    , cmd_node_struct *cust_node, cmd_diff_data *diff_data)
 {
-    int i = 0;
-    bool ret = FALSE;
-    
-    if (0 == strcmp(cust_node->cmd_type, def_node->cmd_type) &&
-        0 != strcmp(cust_node->cmd_str, def_node->cmd_str)
-        )
+    int key_word_len = 0;
+    int parsed_len = 0;
+    int id = -1;
+    bool ret = TRUE;
+    char *key_word = NULL;
+    cmd_attribute_struct *cmd_attr_p = ppkg_get_cmd_attr(cust_node->cmd_type);
+
+    if (NULL == cmd_attr_p || NULL == cmd_attr_p->key_paras)
     {
+        int clen = 0;
+        int dlen = 0;
+        int cparse_len = 0;
+        int dparse_len = 0;
+        char dsub_str[MAX_TEMP_BUFF_LEN] = {0};
+        char csub_str[MAX_TEMP_BUFF_LEN] = {0};
+       
+        if (!cust_node->is_multi_cmd || !cmd_attr_p || !cmd_attr_p->first_param)
+        {
+            ret = (bool)(0 == strcmp(cust_node->cmd_str, def_node->cmd_str));
+            diff_data->diff_id_list = NULL;
+            diff_data->diff_id_num = MAX_COMMAND_NUM;
+        }
+        else
+        {
+            DBG_TRACE("is_multi_cmd:%d, first_param:%p, cust_str_len:%d, def_str_len:%d"
+                , cust_node->is_multi_cmd, cmd_attr_p->first_param
+                , strlen(cust_node->cmd_str), strlen(def_node->cmd_str)
+                );
+            while (cparse_len < strlen(cust_node->cmd_str) && 
+                   dparse_len < strlen(def_node->cmd_str))
+            {
+                clen = ppkg_get_multi_cmd_str(cmd_attr_p->first_param
+                        , csub_str, &id, (char*)(cust_node->cmd_str + cparse_len));
+                dlen = ppkg_get_multi_cmd_str(cmd_attr_p->first_param
+                        , dsub_str, NULL, (char*)(def_node->cmd_str + dparse_len));
+                if (!clen || !dlen)
+                {
+                    break;
+                }
+                cparse_len += clen;
+                dparse_len += dlen;
+
+                if (clen != dlen || 
+                    strcmp(csub_str, dsub_str))
+                {
+                    if (id >= 0)
+                        ppkg_insert_command_id(id, diff_data);
+                    ret = FALSE;
+                }
+
+                memset(csub_str, 0, MAX_TEMP_BUFF_LEN);
+                memset(dsub_str, 0, MAX_TEMP_BUFF_LEN);
+            }
+        }
+    }
+    else
+    {
+        key_word = (char*)malloc(strlen(cmd_attr_p->key_paras));
+        if(NULL == key_word) return ret;
+        
+        /* Key parameters compare */
+        do
+        {
+            memset(key_word, 0, strlen(cmd_attr_p->key_paras));
+            key_word_len = ppkg_get_key_word(key_word, (const char *)(cmd_attr_p->key_paras + parsed_len));
+            *(key_word + key_word_len) = (char)0;
+            DBG_TRACE("key_word_len:%d, parsed_len:%d, key_word:%s", key_word_len, parsed_len, key_word);
+            
+            if (key_word_len)
+            {
+                /* Skip ',' */
+                key_word_len++;
+                parsed_len += key_word_len;
+                
+                if (!ppkg_cmd_keyword_compare(key_word, def_node->cmd_str, cust_node->cmd_str, diff_data))
+                {
+                    ret = FALSE;
+                }
+            }
+            else
+            {
+                break;
+            }
+        }
+        while(parsed_len < strlen(cmd_attr_p->key_paras));
+
+        free(key_word);
     }
     //DBG_TRACE("ret:%d, [%s,%s]", ret, multi_cmd_type[i], cmd_type);    
 
@@ -820,11 +1242,15 @@ static bool ppkg_cmd_compare(cmd_node_struct *def_node, cmd_node_struct *cust_no
 * Description: a callback function to compare between default configuration and customer 
 *              configuration, then generate a diff command list.
 *************************************************************************************/
-static int ppkg_cmp_list_cb_diff(cfg_list_queue *def_q, cmd_node_struct *def_node, cmd_node_struct *cust_node)
+static int ppkg_cmp_list_cb_diff(cfg_list_queue *def_q
+            , cmd_node_struct *def_node, cmd_node_struct *cust_node)
 {
     cmd_node_struct *diff_node = NULL;
-    int ret = 0;
-    
+    cmd_diff_data  diff_data = {0};
+
+    diff_data.diff_id_num = 0;
+    diff_data.diff_id_list = &command_id_list[0];
+   
     do
     {
         if (ppkg_is_ignore_cmd(cust_node->cmd_type))
@@ -832,38 +1258,56 @@ static int ppkg_cmp_list_cb_diff(cfg_list_queue *def_q, cmd_node_struct *def_nod
             DBG_TRACE("ignore command");
             break;
         }
-        
-        if (0 == strcmp(cust_node->cmd_type, def_node->cmd_type) &&
-            0 != strcmp(cust_node->cmd_str, def_node->cmd_str)
-            )
+        //DBG_TRACE("ppkg_cmp_list_cb_diff[%s, %s]", cust_node->cmd_type, def_node->cmd_type);
+        if (0 == strcmp(cust_node->cmd_type, def_node->cmd_type))
         {
-            if ((diff_node = (cmd_node_struct *)malloc(sizeof(cmd_node_struct))) == NULL)
+            //if (0 != strcmp(cust_node->cmd_str, def_node->cmd_str))
+            if (!ppkg_cmd_compare(def_node, cust_node, &diff_data))
             {
-                DBG_TRACE("malloc failed");
-                ret = 0;
-                break;
+                if ((diff_node = (cmd_node_struct *)malloc(sizeof(cmd_node_struct))) == NULL)
+                {
+                    DBG_TRACE("malloc failed");
+                    break;
+                }
+                memset(diff_node, 0, (sizeof(cmd_node_struct)));
+                strcpy(diff_node->cmd_type, cust_node->cmd_type);
+                DBG_TRACE("is_multi_cmd:%d, diff_id_list:%p"
+                        , cust_node->is_multi_cmd, diff_data.diff_id_list);
+                if (cust_node->is_multi_cmd && diff_data.diff_id_list)
+                {
+                    if (NULL == (diff_node->diff_data.diff_id_list 
+                                    = (int *)malloc(sizeof(int) * diff_data.diff_id_num)))
+                    {
+                        DBG_TRACE("malloc failed2");
+                        break;
+                    }
+
+                    DBG_TRACE("diff_data.diff_id_num:%d", diff_data.diff_id_num);
+                    diff_node->diff_data.diff_id_num = diff_data.diff_id_num;
+                    memset(diff_node->diff_data.diff_id_list
+                            , 0, (sizeof(int) * diff_data.diff_id_num));
+                    memcpy(diff_node->diff_data.diff_id_list
+                            , diff_data.diff_id_list
+                            , (sizeof(int) * diff_data.diff_id_num));
+                }
+                
+                DBG_TRACE("->diff_node:%s", diff_node->cmd_type);
+                ppkg_queue_push(&cmd_list.diff_cfg, diff_node);
             }
-            memset(diff_node, 0, (sizeof(cmd_node_struct)));
-            strcpy(diff_node->cmd_type, cust_node->cmd_type);
-            DBG_TRACE("->diff_node:%s", diff_node->cmd_type);
-           
-            ppkg_queue_push(&cmd_list.diff_cfg, diff_node);
-            ret = cmd_list.diff_cfg.len;
-
-            ppkg_queue_del(def_q, def_node);
-            free(def_node);
-
+            
+            //ppkg_queue_del(def_q, def_node);
+            //free(def_node);  
             break;
         }
         else
         {
+            //DBG_TRACE("ppkg_cmp_list_cb_diff[%p, %p]", def_node, def_node->next);
             def_node = def_node->next;
-            
         }
     }
     while (def_node != NULL);
 
-    return ret;
+    return cmd_list.diff_cfg.len;
 }
 
 /************************************************************************************
@@ -880,8 +1324,6 @@ static int ppkg_compare_cmd_list(
     cmd_node_struct *cmp_node = NULL;
     cmd_node_struct *opr_node = NULL;
     int ret = 0;
-
-    DBG_TRACE("ppkg_compare_cmd_list");
     
     if (NULL == cmp_q || NULL == opr_q)
     {
@@ -899,6 +1341,7 @@ static int ppkg_compare_cmd_list(
             break;
         }
 
+        //DBG_TRACE("def_node:%p, cust_node:%p", opr_node, cmp_node);
         ret = cb(cmp_q, cmp_node, opr_node);
         
         DBG_TRACE("opr_node->cmd_type:%s, opr_q_len:%d, ret=%d"
@@ -977,12 +1420,14 @@ static int ppkg_assemble_single_command(cmd_node_struct *ini_node)
 * Return: void
 * Description:  assemble atfile 
 *************************************************************************************/
-static int ppkg_assemble_atfile_body(cfg_list_queue *ini_q, cmd_node_struct *ini_node)
+static int ppkg_assemble_atfile_body(cfg_list_queue *ini_q
+                , cmd_node_struct *ini_node, cmd_diff_data *diff_data)
 {
     
     int len = 0;
     char *first_cmd_type = NULL;
     cmd_node_struct *del_node = NULL;
+    int i = 0;
 
     if (NULL == ini_node)
     {
@@ -992,22 +1437,37 @@ static int ppkg_assemble_atfile_body(cfg_list_queue *ini_q, cmd_node_struct *ini
     if (!ini_node->is_multi_cmd)
     {
         len = ppkg_assemble_single_command(ini_node);
-        ppkg_queue_del(ini_q, ini_node);
-        free(ini_node);
+        //ppkg_queue_del(ini_q, ini_node);
+        //free(ini_node);
     }
     else
     {
         first_cmd_type = ini_node->cmd_type;
+        DBG_TRACE("first_cmd_type:%s", first_cmd_type);
         do
         {
-            len = ppkg_assemble_single_command(ini_node);
-            del_node = ini_node;
-            ini_node = ini_node->next;
+            DBG_TRACE("diff_id_list:%p, ini_node->id:%d, i:%d, diff_id_num:%d, cmd_type:%s"
+                , diff_data->diff_id_list, ini_node->id, i, diff_data->diff_id_num
+                , ini_node->cmd_type);
+            if (NULL == diff_data->diff_id_list || 
+                diff_data->diff_id_list[i] == ini_node->id)
+            {
+                len = ppkg_assemble_single_command(ini_node);
+                //del_node = ini_node;
+                ini_node = ini_node->next;
+                i++;
 
-            ppkg_queue_del(ini_q, del_node);
-            free(del_node);
+                //ppkg_queue_del(ini_q, del_node);
+                //free(del_node);
+            }
+            else
+            {
+                ini_node = ini_node->next;
+            }
         }
-        while (ini_node != NULL && (strcmp(first_cmd_type, ini_node->cmd_type) == 0));
+        while (ini_node != NULL && 
+               i < diff_data->diff_id_num && 
+               (strcmp(first_cmd_type, ini_node->cmd_type) == 0));
     }
 
     return len;
@@ -1020,10 +1480,9 @@ static int ppkg_assemble_atfile_body(cfg_list_queue *ini_q, cmd_node_struct *ini
 * Return: length of atfile
 * Description: 
 *************************************************************************************/
-static int ppkg_cmp_list_cb_atfile(cfg_list_queue *ini_q, cmd_node_struct *ini_node, cmd_node_struct *diff_node)
+static int ppkg_cmp_list_cb_atfile(cfg_list_queue *ini_q
+                , cmd_node_struct *ini_node, cmd_node_struct *diff_node)
 {
-    bool new_cmd = TRUE;
-
     if (NULL == diff_node || NULL == ini_node)
     {
         DBG_TRACE("diff_node || ini_node");
@@ -1032,17 +1491,9 @@ static int ppkg_cmp_list_cb_atfile(cfg_list_queue *ini_q, cmd_node_struct *ini_n
     
     do
     {
-    #if 0
-        if (ppkg_is_multi_cmd(diff_node->cmd_type))
-        {
-            DBG_TRACE("multi-command, return");
-            break;
-        }
-    #endif
         if (0 == strcmp(diff_node->cmd_type, ini_node->cmd_type))
         {
-            ppkg_assemble_atfile_body(ini_q, ini_node);
-            new_cmd = FALSE;
+            ppkg_assemble_atfile_body(ini_q, ini_node, &(diff_node->diff_data));
             break;
         }
         else
