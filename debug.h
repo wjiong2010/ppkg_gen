@@ -30,8 +30,15 @@ extern int debug_print_log(char *fmt, ...);
 * Macros
 *************************************************************************************/
 #define MAX_TRACE_LOG_LEN  1024
-#define TRUE    1
-#define FALSE   0
+#ifndef FALSE
+#define FALSE 0
+#endif
+
+#ifndef TRUE
+#define TRUE 1
+#endif
+
+
 
 #if 1 
 #define DBG_TRACE(format, ...)\
