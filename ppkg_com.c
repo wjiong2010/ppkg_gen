@@ -175,7 +175,7 @@ DWORD com_write(HANDLE hCom, char* pbuf, int len)
     {
         /* Stop send and clear send buffer. */
         PurgeComm(hCom, PURGE_TXABORT | PURGE_TXCLEAR);
-        DBG_TRACE("com_write, PurgeComm");
+        //DBG_TRACE("com_write, PurgeComm");
     }
 
     if (0 == WriteFile(hCom, pbuf, len, &wCount, NULL))
@@ -204,6 +204,7 @@ DWORD com_read(HANDLE hCom, char* read_buf, int buf_size)
     unsigned char bReadStat;
     char buff[MAX_BUF_SIZE] = {0};
     int i = 0;
+    int min_buff_size = MAX_BUF_SIZE;
 
     if (NULL == read_buf || 0 == buf_size)
     {
@@ -217,14 +218,19 @@ DWORD com_read(HANDLE hCom, char* read_buf, int buf_size)
         DBG_TRACE("com_read, PurgeComm");
     }
 
+    if (min_buff_size > buf_size)
+    {
+        min_buff_size = buf_size;
+    }
+    
     while(1)
     {
-        bReadStat = ReadFile(hCom, (char*)&buff[i], MAX_BUF_SIZE, &wCount, NULL);
+        bReadStat = ReadFile(hCom, (char*)&buff[i], min_buff_size, &wCount, NULL);
 
         i += wCount;
         DBG_TRACE("bReadStat:%d", bReadStat);
 
-        if (i >= MAX_BUF_SIZE)
+        if (i >= min_buff_size)
         {
             DBG_TRACE("ReadFile buff full!");
             wCount = i;
