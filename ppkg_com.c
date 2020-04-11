@@ -195,9 +195,9 @@ DWORD com_write(HANDLE hCom, char* pbuf, int len)
 * Return:
 * Description: 
 *************************************************************************************/
-DWORD com_read(HANDLE hCom, char* read_buf, int buf_size)
+bool com_read(HANDLE hCom, char* read_buf, int buf_size, int *read_len)
 {
-    #define MAX_BUF_SIZE 128
+    #define MAX_BUF_SIZE 256
 
     DWORD dwError;
     DWORD wCount = 0;
@@ -205,11 +205,13 @@ DWORD com_read(HANDLE hCom, char* read_buf, int buf_size)
     char buff[MAX_BUF_SIZE] = {0};
     int i = 0;
     int min_buff_size = MAX_BUF_SIZE;
+    bool result = FALSE;
+    int rd_len = 0;
 
     if (NULL == read_buf || 0 == buf_size)
     {
         DBG_TRACE("com_read, NULL buffer, return!");
-        return wCount;
+        return result;
     }
  
     if (ClearCommError(hCom, &dwError, NULL))
@@ -217,44 +219,45 @@ DWORD com_read(HANDLE hCom, char* read_buf, int buf_size)
         PurgeComm(hCom, PURGE_RXABORT | PURGE_RXCLEAR);
         DBG_TRACE("com_read, PurgeComm");
     }
-
-    if (min_buff_size > buf_size)
-    {
-        min_buff_size = buf_size;
-    }
     
     while(1)
     {
-        bReadStat = ReadFile(hCom, (char*)&buff[i], min_buff_size, &wCount, NULL);
+        bReadStat = ReadFile(hCom, buff, MAX_BUF_SIZE, &wCount, NULL);
 
-        i += wCount;
-        DBG_TRACE("bReadStat:%d", bReadStat);
-
-        if (i >= min_buff_size)
-        {
-            DBG_TRACE("ReadFile buff full!");
-            wCount = i;
-            break;
-        }
+        DBG_TRACE("bReadStat:%d, wCount:%d", bReadStat, wCount);
             
         if (!bReadStat)
         {
             DBG_TRACE("ReadFile failed!");
-            wCount = 0;
+            break;
+        }
+        
+        if (rd_len + wCount > buf_size)
+        {
+            DBG_TRACE("buffer full");
+            memcpy(&read_buf[rd_len], buff, buf_size - rd_len);
+            *read_len = buf_size;
+            result = TRUE;
             break;
         }
 
-        if (bReadStat && !wCount)
+        if (wCount > 0)
+        {
+            memcpy(&read_buf[rd_len], buff, wCount);
+            rd_len += wCount;
+            memset(buff, 0, MAX_BUF_SIZE);
+        }
+        else
+        if (bReadStat)
         {
             DBG_TRACE("ReadFile completed!");
-            wCount = i;
+            *read_len = rd_len;
+            result = TRUE;
             break;
         }
     }
-
-    memcpy(read_buf, buff, wCount);
     
-    return wCount;
+    return result;
 }
 
 
