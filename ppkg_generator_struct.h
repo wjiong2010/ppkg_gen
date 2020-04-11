@@ -12,9 +12,15 @@
 /************************************************************************************
 * Include
 *************************************************************************************/
+#include <unistd.h>
+#include <windows.h>
+
 /************************************************************************************
 * Define and Declaration
 *************************************************************************************/
+#define HFILE           FILE
+#define HCOM            HANDLE
+
 #define MAX_LEN_PATH        128
 #define MAX_LEN_FW_VER      64
 #define MAX_CMD_LIST_SIZE   1000
@@ -51,6 +57,8 @@ MetaResult[1]=OK
 #define LINE_CMD_FLAG       "<Command"
 #define LINE_VERSION_FLAG   "<Commands"
 #define LINE_ATGT_CMD       "AT+GT"
+#define LINE_ATCSUB_CMD     "AT+CSUB"
+
 
 #define VERSION_TITLE_STR   "FirmwareSubVersion="
 #define AT_FILE_HEAD_STR    "[ConfirMeta]\r\n\r\n"
@@ -67,6 +75,16 @@ typedef enum {
     UNKOWN_LINE
 } line_type_enum;
 
+typedef enum {
+    GEN_SUCCESS = 0,
+    GEN_CONFIG_FAIL = -1,
+    GEN_CMD_LIST_FAIL = -2,
+    GEN_ATFILE = -3,
+    GEN_COMM = -4,
+    GEN_PRE_CHECK = -5,    
+} gen_result_enum;
+
+
 /************************************************************************************
 * Structs
 *************************************************************************************/
@@ -77,37 +95,42 @@ typedef struct {
     char path_cust_ini[MAX_LEN_PATH];
 } cfg_info_struct;
 
-typedef struct {
-    int     diff_id_num;
-    int     *diff_id_list;
-} cmd_diff_data;
-
 typedef struct _node {
     struct _node  *pre;
     struct _node  *next;
-    char    cmd_type[MAX_LEN_CMD_TYPE + 1];
-    bool    is_multi_cmd;
-    int     id;             /* Only for multi-command */
-    cmd_diff_data   diff_data;
-    int     cmd_len;
-    char    cmd_str[1];
+} __node_struct;
+typedef __node_struct link_type;
+
+typedef struct {
+    link_type   qlink;
+    int         len;
+} __queue_struct;
+typedef __queue_struct queue_type;
+
+typedef struct {
+    int         diff_id_num;
+    int         *diff_id_list;
+} cmd_diff_data;
+
+typedef struct {
+    link_type   qlink;
+    char        cmd_type[MAX_LEN_CMD_TYPE + 1];
+    bool        is_multi_cmd;
+    cmd_diff_data diff_data;
+} diff_cmd_node;
+
+
+
+typedef struct {
+    link_type   qlink;
+    char        cmd_type[MAX_LEN_CMD_TYPE + 1];
+    bool        is_multi_cmd;
+    int         id;             /* Only for multi-command */
+    int         cmd_len;
+    char        cmd_str[1];
 } cmd_node_struct;
 
-typedef struct {
-    cmd_node_struct *qhead;
-    cmd_node_struct *qtail;
-    int len;
-} cfg_list_queue;
-
-typedef struct {
-    cfg_list_queue def_cfg;
-    cfg_list_queue cust_cfg;
-    cfg_list_queue cust_ini;
-    cfg_list_queue diff_cfg;
-} cmd_list_struct;
-
-typedef struct
-{   
+typedef struct {   
     char    *cmd_name;
     bool    ignored;
     char    *first_param;
@@ -117,19 +140,23 @@ typedef struct
     char    *key_paras;
 } cmd_attribute_struct;
 
-typedef struct 
-{
+typedef struct {
 	int rd_pos;
 	int wr_pos;
 	int valid_bytes;
 	char *data;
 } circal_buffer;
 
-typedef struct 
-{
-    FILE    *temp_fp;
-    int     cmd_cnt;
-    char    pre_cmd_type[MAX_LEN_CMD_TYPE + 1];
+typedef struct {
+    HFILE       *temp_fp;
+    int         cmd_cnt;
+    char        pre_cmd_type[MAX_LEN_CMD_TYPE + 1];
+    queue_type  default_cfg;
+    queue_type  custom_cfg;
+    queue_type  custom_ini;
+    queue_type  differ_cfg;
+    HCOM        com_hdlr;
+    circal_buffer cir_buff;
 } ppkg_gen_context;
 
 #endif /* __PPKG_GENERATOR_STRUCT_H__ */

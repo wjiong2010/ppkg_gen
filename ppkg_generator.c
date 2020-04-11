@@ -10,16 +10,16 @@
 /************************************************************************************
 * Include
 *************************************************************************************/
-#include <unistd.h>
-
 #include "debug.h"
 #include "ppkg_generator_struct.h"
+#include "ppkg_com.h"
 
 /************************************************************************************
 * Define and Declaration
 *************************************************************************************/
 static char memory_block[MAX_MEM_BLOCK_LEN] = {0};
 static char temp_buff[MAX_TEMP_BLOCK_LEN] = {0};
+static char read_buff[MAX_TEMP_BLOCK_LEN] = {0};
 static int  command_id_list[MAX_ID_LIST_LEN] = {0};
 
 static cmd_attribute_struct command_attr_table[] =
@@ -42,29 +42,193 @@ static cmd_attribute_struct command_attr_table[] =
 };
 
 static cfg_info_struct cfg_info;
-static cmd_list_struct cmd_list;
-static circal_buffer   cir_buff;
 static ppkg_gen_context ppkg_context_st;
 static ppkg_gen_context *ppkg_cntx_p = &ppkg_context_st;
 
 /************************************************************************************
 * Types
 *************************************************************************************/
-typedef int (*cb_func)(cfg_list_queue *cmp_q, cmd_node_struct *cust_node, cmd_node_struct *def_node);
+typedef int (*cb_func)(queue_type *cmp_q, link_type *cust_node, link_type *def_node);
 
 /************************************************************************************
 * Process
 *************************************************************************************/
 /************************************************************************************
-* Function: ppkg_init_circal_buff
-* Author @ Date: John.Wang@20200216
+* Function: q_init
+* Author @ Date: John.Wang@20200308
 * Input:
 * Return: 
 * Description: 
 *************************************************************************************/
-static void ppkg_init_context(void)
+static void q_init(queue_type *queue_p)
 {
-    memset(ppkg_cntx_p, 0, sizeof(ppkg_gen_context));
+    if (NULL == queue_p)
+    {
+        DBG_TRACE("return q_init NULL");
+        return;
+    }
+
+    queue_p->qlink.pre = queue_p->qlink.next = (link_type*)(&queue_p->qlink);
+    queue_p->len = 0;
+}
+
+/************************************************************************************
+* Function: q_destroy
+* Author @ Date: John.Wang@20200411
+* Input:
+* Return: 
+* Description: 
+*************************************************************************************/
+static void q_destroy(queue_type *queue_p)
+{
+    if (NULL == queue_p)
+    {
+        DBG_TRACE("return q_destroy NULL");
+        return;
+    }
+
+    queue_p->qlink.pre = queue_p->qlink.next = NULL;
+    queue_p->len = 0;
+}
+
+/************************************************************************************
+* Function: q_put
+* Author @ Date: John.Wang@20200308
+* Input:
+* Return: 
+* Description: 
+*************************************************************************************/
+int q_put(queue_type *queue_p, link_type *node)
+{
+    link_type *head = NULL;
+    
+    if (NULL == queue_p || NULL == node)
+    {
+        DBG_TRACE("return q_put NULL");
+        return -1;
+    }
+
+    head = (link_type*)(&queue_p->qlink);
+
+    node->next = head;
+    node->pre = head->pre;
+    head->pre->next = node;
+    head->pre = node;
+
+    queue_p->len++;
+    
+    return queue_p->len;
+}
+
+/************************************************************************************
+* Function: q_check
+* Author @ Date: John.Wang@20200308
+* Input:
+* Return: 
+* Description: checkout the head node of queue
+*************************************************************************************/
+link_type *q_check(queue_type *queue_p)
+{
+    link_type *head = NULL;
+    link_type *node = NULL;
+    
+    if (NULL == queue_p || 0 == queue_p->len)
+    {
+        DBG_TRACE("return q_check NULL");
+        return NULL;
+    }
+    
+    head = (link_type*)(&queue_p->qlink);
+
+    node = head->next;
+    head->next = node->next;
+    node->next->pre = node->pre;
+
+    queue_p->len--;
+    
+    return node;
+}
+
+/************************************************************************************
+* Function: q_get
+* Author @ Date: John.Wang@20200409
+* Input:
+* Return: 
+* Description: get the node next the head but do not checkout
+*************************************************************************************/
+link_type *q_get(queue_type *queue_p)
+{
+    if (NULL == queue_p || 0 == queue_p->len)
+    {
+        DBG_TRACE("return q_get NULL");
+        return NULL;
+    }
+
+    return queue_p->qlink.next;
+}
+
+/************************************************************************************
+* Function: q_next
+* Author @ Date: John.Wang@20200409
+* Input:
+* Return: 
+* Description: get the node next the link_p but do not checkout
+*************************************************************************************/
+link_type *q_next(queue_type *queue_p, link_type *link_p)
+{
+    if (NULL == queue_p || NULL == link_p)
+    {
+        DBG_TRACE("return q_next NULL");
+        return NULL;
+    }
+
+    if (link_p->next == &queue_p->qlink)
+    {
+        return NULL;
+    }
+    else
+    {
+        return link_p->next;
+    }
+}
+
+/************************************************************************************
+* Function: q_delete
+* Author @ Date: John.Wang@20200409
+* Input:
+* Return: 
+* Description: delete del_item in queue.
+*************************************************************************************/
+int q_delete(queue_type *queue_p, link_type *del_item)
+{   
+    if (NULL == queue_p || 0 == queue_p->len || NULL == del_item)
+    {
+        DBG_TRACE("return q_delete -1");
+        return -1;
+    }
+    del_item->pre->next = del_item->next;
+    del_item->next->pre = del_item->pre;
+    queue_p->len--;
+
+    return queue_p->len;
+}
+
+/************************************************************************************
+* Function: q_size
+* Author @ Date: John.Wang@20200409
+* Input:
+* Return: 
+* Description: get the length of the queue
+*************************************************************************************/
+int q_size(queue_type *queue_p)
+{
+    if (NULL == queue_p)
+    {
+        DBG_TRACE("return q_size NULL");
+        return 0;
+    }
+
+    return queue_p->len;
 }
 
 /************************************************************************************
@@ -145,7 +309,7 @@ static int ppkg_circal_buff_get_valid_bytes(circal_buffer *cir_p)
 }
 
 /************************************************************************************
-* Function: ppkg_reset_circal_buff
+* Function: ppkg_write_circal_buff
 * Author @ Date: John.Wang@20200216
 * Input:
 * Return: 
@@ -319,195 +483,24 @@ static int ppkg_read_circal_buff_line(circal_buffer *cir_p, char *buff_p, unsign
 * Description: parse config file and get config information: path of param file, 
 *              firmware version, etc...
 *************************************************************************************/
-static void ppkg_queue_init(cfg_list_queue *queue_p)
-{
-    if (NULL == queue_p)
-    {
-        DBG_TRACE("return queue_p NULL");
-        return;
-    }
-
-    queue_p->qhead = queue_p->qtail = NULL;
-    queue_p->len = 0;
-}
-
-/************************************************************************************
-* Function: ppkg_queue_push
-* Author @ Date: John.Wang@20200216
-* Input:
-* Return: length of queue
-* Description: push node to the tail of queue
-*************************************************************************************/
-static int ppkg_queue_push(cfg_list_queue *queue_p, cmd_node_struct *node_p)
-{   
-    if (NULL == queue_p || NULL == node_p)
-    {
-        DBG_TRACE("return queue_p || node_p NULL");
-        return -1;
-    }
-
-    if (NULL == queue_p->qtail)
-    {
-        /* Push the first node to queue */
-        queue_p->qhead = queue_p->qtail = node_p;
-        queue_p->qtail->next = NULL;
-        queue_p->qtail->pre = NULL;
-    }
-    else
-    {
-        queue_p->qtail->next = node_p;
-        node_p->pre = queue_p->qtail;
-        node_p->next = NULL;
-        queue_p->qtail = queue_p->qtail->next;
-    }  
-
-    queue_p->len++;
-    DBG_TRACE("queue_p->len:%d", queue_p->len);
-
-    return queue_p->len;
-}
-
-/************************************************************************************
-* Function: ppkg_queue_pop
-* Author @ Date: John.Wang@20200216
-* Input:
-* Return: length of queue
-* Description: pop node from queue head
-*************************************************************************************/
-static int ppkg_queue_pop(cfg_list_queue *queue_p, cmd_node_struct **node_p)
-{
-    if (NULL == queue_p)
-    {
-        DBG_TRACE("return queue_p NULL");
-        return -1;
-    }
-
-    if (NULL != queue_p->qhead)
-    {
-        *node_p = queue_p->qhead;
-        if (queue_p->len > 1)
-        {
-            queue_p->qhead = queue_p->qhead->next;
-            queue_p->qhead->pre = NULL;
-            (*node_p)->next = NULL;  
-        }              
-    }
-
-    queue_p->len--;
-   // DBG_TRACE("queue_p->len:%d, *node_p:%p", queue_p->len, *node_p);
-
-    return queue_p->len;
-}
-
-/************************************************************************************
-* Function: ppkg_queue_del
-* Author @ Date: John.Wang@20200216
-* Input:
-* Return: length of queue
-* Description: delete node_p in queue
-*************************************************************************************/
-static int ppkg_queue_del(cfg_list_queue *queue_p, cmd_node_struct *node_p)
-{
-    cmd_node_struct *p = NULL;
-    if (NULL == queue_p || queue_p->len == 0)
-    {
-        DBG_TRACE("return queue_p NULL");
-        return -1;
-    }
-
-    p = queue_p->qhead;
-    while (p != NULL)
-    {
-        DBG_TRACE("p:%p, node_p:%p", p, node_p);
-        if (node_p == p)
-        {
-            if (NULL != p->pre)
-            {
-                DBG_TRACE("p->pre:%p", p->pre);
-                p->pre->next = p->next;             
-            }
-
-            if (NULL != p->next)
-            {
-                DBG_TRACE("p->next:%p", p->next);
-                p->next->pre = p->pre;
-            }
-            queue_p->len--;
-            break;
-        }
-        p = p->next;
-    }
-       
-    DBG_TRACE("queue_p->len:%d, node_p:%p", queue_p->len, node_p);
-
-    return queue_p->len;
-}
-
-
-/************************************************************************************
-* Function: ppkg_queue_get_head
-* Author @ Date: John.Wang@20200216
-* Input:
-* Return: pointer to queue head
-* Description: get queue head but not pop
-*************************************************************************************/
-static cmd_node_struct* ppkg_queue_get_head(cfg_list_queue *queue_p)
-{
-    if (NULL == queue_p)
-    {
-        DBG_TRACE("return queue_p NULL");
-        return NULL;
-    }
-
-    //DBG_TRACE("queue_p->qhead:%p, next:%p", queue_p->qhead, queue_p->qhead->next);
-    
-    return queue_p->qhead;
-}
-
-/************************************************************************************
-* Function: ppkg_queue_get_len
-* Author @ Date: John.Wang@20200219
-* Input:
-* Return: 
-* Description: get the number of rest node in queue
-*************************************************************************************/
-static int ppkg_queue_get_len(cfg_list_queue *queue_p)
-{
-    if (NULL == queue_p)
-    {
-        DBG_TRACE("return queue_p NULL");
-        return 0;
-    }
-
-    return queue_p->len;
-}
-
-/************************************************************************************
-* Function: ppkg_get_cfg_info
-* Author @ Date: John.Wang@20200216
-* Input:
-* Return: parser result
-* Description: parse config file and get config information: path of param file, 
-*              firmware version, etc...
-*************************************************************************************/
-static int ppkg_get_cfg_info(cfg_info_struct *cfg_info_p)
+static bool ppkg_get_cfg_info(cfg_info_struct *cfg_info_p)
 {
     if (NULL == cfg_info_p)
     {
         DBG_TRACE("return cfg_info_p NULL");
-        return -1;
+        return FALSE;
     }
 
     memset(cfg_info_p, 0, sizeof(cfg_info_struct));
     
-    strcpy(cfg_info_p->fm_version, "GV300NR00A04V07M128_MIX_DET");
+    strcpy(cfg_info_p->fm_version, "GV300NR00A17V21M128");
     strcpy(cfg_info_p->path_def_cfg, "D:\\forfun\\paramPackage_test\\A04V07_default.gv300");
     strcpy(cfg_info_p->path_cust_cfg, "D:\\forfun\\paramPackage_test\\C_GV300_A04V07_M0_0.gv300");
     strcpy(cfg_info_p->path_cust_ini, "D:\\forfun\\paramPackage_test\\C_GV300_A04V07_M0_0_at.ini");
 
     DBG_TRACE("cfg_info_p->fm_version:%s", cfg_info_p->fm_version);
     
-    return 0;
+    return TRUE;
 }
 
 /************************************************************************************
@@ -621,33 +614,7 @@ static line_type_enum ppkg_get_buff_line_type(const char *cmd_str, int cmd_len)
     
     return line_type;
 }
-#if 0
-/************************************************************************************
-* Function: ppkg_is_multi_cmd
-* Author @ Date: John.Wang@20200222
-* Input:
-* Return: TRUE: is multi command FALSE is not...
-* Description: 
-*************************************************************************************/
-static bool ppkg_is_multi_cmd(const char* cmd_type)
-{
-    int i = 0;
-    bool ret = FALSE;
-    
-    while (NULL != command_attr_table[i].cmd_name)
-    {
-        if (strcmp(command_attr_table[i].cmd_name, cmd_type) == 0)
-        {
-            ret = (bool)(command_attr_table[i].id_pos != 0);
-            break;
-        }
-        i++;
-    }
-    //DBG_TRACE("ret:%d, [%s,%s]", ret, command_attr_table[i].cmd_name, cmd_type);    
 
-    return ret;
-}
-#endif
 /************************************************************************************
 * Function: ppkg_get_multi_cmd_id_position
 * Author @ Date: John.Wang@20200222
@@ -694,8 +661,7 @@ static cmd_attribute_struct *ppkg_get_cmd_attr(const char* cmd_type)
         }
         i++;
     }
-    DBG_TRACE("i:%d, cmd_type:%s, ret_p:%p"
-                , i, cmd_type, ret_p);
+    DBG_TRACE("i:%d, cmd_type:%s, ret_p:%p", i, cmd_type, ret_p);
 
     return ret_p;
 }
@@ -708,10 +674,10 @@ static cmd_attribute_struct *ppkg_get_cmd_attr(const char* cmd_type)
 * Return: 
 * Description: 
 *************************************************************************************/
-static int ppkg_get_multi_cmd_id(const char *cmd_str, int cmd_len, int id_pos)
+static int ppkg_get_multi_cmd_id(char *cmd_str, int cmd_len, int id_pos)
 {
     char para_buff[8] = {0};
-    char *p, *q, *k;
+    char *p,*q, *k;
     int i = 0;
 
     p = cmd_str;
@@ -749,7 +715,7 @@ static int ppkg_get_multi_cmd_id(const char *cmd_str, int cmd_len, int id_pos)
 * Return: 
 * Description: 
 *************************************************************************************/
-static int ppkg_covert_to_list(circal_buffer *cir_buf, cfg_list_queue *queue_p)
+static int ppkg_covert_to_list(circal_buffer *cir_buf, queue_type *queue_p)
 {
     cmd_node_struct *node_p = NULL;
     line_type_enum line_type = UNKOWN_LINE;
@@ -776,7 +742,7 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, cfg_list_queue *queue_p)
         memset(node_p, 0, (sizeof(cmd_node_struct) + ret));
         parsed_len = ppkg_get_cmd_type(node_p->cmd_type, temp_buff, line_type);
         id_pos = ppkg_get_multi_cmd_id_position(node_p->cmd_type);
-        node_p->is_multi_cmd = (bool)(id_pos != 0);//ppkg_is_multi_cmd(node_p->cmd_type);
+        node_p->is_multi_cmd = (bool)(id_pos != 0);
         if (CFG_LINE == line_type)
         {
             /* Skip command type and right " */
@@ -789,7 +755,7 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, cfg_list_queue *queue_p)
             node_p->id = ppkg_get_multi_cmd_id(node_p->cmd_str, node_p->cmd_len, id_pos);
         }
         DBG_TRACE("->cmd_type:%s, %d, %s", node_p->cmd_type, node_p->cmd_len, node_p->cmd_str);
-        ppkg_queue_push(queue_p, node_p);
+        q_put(queue_p, (link_type *)node_p);
     }
     else if (VER_LINE == line_type)
     {
@@ -812,7 +778,7 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, cfg_list_queue *queue_p)
 * Description: parse parameter file and build a command list, include command type 
 *              and command parameter.
 *************************************************************************************/
-static int ppkg_build_cmd_list(char* path, cfg_list_queue *queue_p)
+static int ppkg_build_cmd_list(char* path, queue_type *queue_p)
 {
     FILE *read_fp;
     int ret = 0;
@@ -835,43 +801,22 @@ static int ppkg_build_cmd_list(char* path, cfg_list_queue *queue_p)
     fseek(read_fp, 0, SEEK_SET);
     do
     {
-        if (ppkg_covert_to_list(&cir_buff, queue_p) < 0 && -3 != ret)
+        if (ppkg_covert_to_list(&ppkg_cntx_p->cir_buff, queue_p) < 0 && -3 != ret)
         {
-            ret = ppkg_read_file(read_fp, &cir_buff);
+            ret = ppkg_read_file(read_fp, &ppkg_cntx_p->cir_buff);
         }
     }
-    while (ppkg_circal_buff_get_valid_bytes(&cir_buff));
+    while (ppkg_circal_buff_get_valid_bytes(&ppkg_cntx_p->cir_buff));
     
+    ret = q_size(queue_p);
     DBG_TRACE("data convertion complete, rest bytes:%d, queue_p->len:%d"
-                    , ppkg_circal_buff_get_valid_bytes(&cir_buff), queue_p->len);
-    ret = queue_p->len;
-    ppkg_reset_circal_buff(&cir_buff);
+                    , ppkg_circal_buff_get_valid_bytes(&ppkg_cntx_p->cir_buff), ret);
+    ppkg_reset_circal_buff(&ppkg_cntx_p->cir_buff);
 
     if (NULL != read_fp)
 	    fclose(read_fp);
     
     return ret;
-}
-
-/************************************************************************************
-* Function: ppkg_get_cmd_list
-* Author @ Date: John.Wang@20200216
-* Input:
-* Return: parser result
-* Description: build a command list for compare between default configuration and 
-*              customer configuration, then find a diff command list.
-*************************************************************************************/
-static void ppkg_cmd_list_init(cmd_list_struct *list_p)
-{
-    if (NULL == list_p)
-    {
-        DBG_TRACE("return list_p NULL");
-        return;
-    }
-
-    ppkg_queue_init(&list_p->def_cfg);
-    ppkg_queue_init(&list_p->cust_cfg);
-    ppkg_queue_init(&list_p->cust_ini);
 }
 
 /************************************************************************************
@@ -946,6 +891,7 @@ static void ppkg_insert_command_id(int id, cmd_diff_data *diff_data)
         {
             diff_data->diff_id_list[diff_data->diff_id_num] = id;
             diff_data->diff_id_num++;
+            DBG_TRACE("insert_command_id:%d", id);
             break;
         }
         if (id == diff_data->diff_id_list[i]) break;
@@ -971,7 +917,6 @@ static int ppkg_get_key_param_info(char *cmd_str,
     /* MinThreshold1="0" 
      * MaxSpeed="0"
      */
-    //DBG_TRACE("p:%s, key_word:%s", p, key);
     while(NULL != (q = strstr(p, key)))
     {
         /* For example: keyword is "Mode" we found "FRIMode0" 
@@ -1242,15 +1187,19 @@ static bool ppkg_cmd_compare(cmd_node_struct *def_node
 * Description: a callback function to compare between default configuration and customer 
 *              configuration, then generate a diff command list.
 *************************************************************************************/
-static int ppkg_cmp_list_cb_diff(cfg_list_queue *def_q
-            , cmd_node_struct *def_node, cmd_node_struct *cust_node)
+static int ppkg_cmp_list_cb_diff(queue_type *def_q
+            , link_type *def_ptr, link_type *cust_ptr)
 {
-    cmd_node_struct *diff_node = NULL;
-    cmd_diff_data  diff_data = {0};
+    diff_cmd_node   *diff_node = NULL;
+    cmd_node_struct *def_node = (cmd_node_struct *)def_ptr;
+    cmd_node_struct *cust_node = (cmd_node_struct *)cust_ptr;
+    cmd_diff_data   diff_data = {0};
+    queue_type      *differ_cfg_queue;
 
     diff_data.diff_id_num = 0;
     diff_data.diff_id_list = &command_id_list[0];
-   
+    differ_cfg_queue = &ppkg_cntx_p->differ_cfg;
+
     do
     {
         if (ppkg_is_ignore_cmd(cust_node->cmd_type))
@@ -1264,12 +1213,12 @@ static int ppkg_cmp_list_cb_diff(cfg_list_queue *def_q
             //if (0 != strcmp(cust_node->cmd_str, def_node->cmd_str))
             if (!ppkg_cmd_compare(def_node, cust_node, &diff_data))
             {
-                if ((diff_node = (cmd_node_struct *)malloc(sizeof(cmd_node_struct))) == NULL)
+                if ((diff_node = (diff_cmd_node *)malloc(sizeof(diff_cmd_node))) == NULL)
                 {
                     DBG_TRACE("malloc failed");
                     break;
                 }
-                memset(diff_node, 0, (sizeof(cmd_node_struct)));
+                memset(diff_node, 0, (sizeof(diff_cmd_node)));
                 strcpy(diff_node->cmd_type, cust_node->cmd_type);
                 DBG_TRACE("is_multi_cmd:%d, diff_id_list:%p"
                         , cust_node->is_multi_cmd, diff_data.diff_id_list);
@@ -1292,22 +1241,24 @@ static int ppkg_cmp_list_cb_diff(cfg_list_queue *def_q
                 }
                 
                 DBG_TRACE("->diff_node:%s", diff_node->cmd_type);
-                ppkg_queue_push(&cmd_list.diff_cfg, diff_node);
+                q_put(differ_cfg_queue, (link_type*)diff_node);
             }
             
-            //ppkg_queue_del(def_q, def_node);
-            //free(def_node);  
+            if (q_delete(def_q, (link_type *)def_node) >= 0)
+            {
+                free(def_node);  
+            }
             break;
         }
         else
         {
-            //DBG_TRACE("ppkg_cmp_list_cb_diff[%p, %p]", def_node, def_node->next);
-            def_node = def_node->next;
+            //DBG_TRACE("ppkg_cmp_list_cb_diff[%p, %p]", def_node, def_node->qlink.next);
+            def_node = (cmd_node_struct *)q_next(def_q, (link_type *)def_node);
         }
     }
     while (def_node != NULL);
 
-    return cmd_list.diff_cfg.len;
+    return q_size(differ_cfg_queue);
 }
 
 /************************************************************************************
@@ -1319,10 +1270,10 @@ static int ppkg_cmp_list_cb_diff(cfg_list_queue *def_q
 *              generate a diff queue.
 *************************************************************************************/
 static int ppkg_compare_cmd_list(
-            cfg_list_queue *cmp_q, cfg_list_queue *opr_q, cb_func cb)
+            queue_type *cmp_q, queue_type *opr_q, cb_func cb)
 {
-    cmd_node_struct *cmp_node = NULL;
-    cmd_node_struct *opr_node = NULL;
+    link_type *cmp_node = NULL;
+    link_type *opr_node = NULL;
     int ret = 0;
     
     if (NULL == cmp_q || NULL == opr_q)
@@ -1333,25 +1284,24 @@ static int ppkg_compare_cmd_list(
     
     do
     {
-        cmp_node = ppkg_queue_get_head(cmp_q); 
-        ppkg_queue_pop(opr_q, &opr_node);
+        cmp_node = q_get(cmp_q);
+        opr_node = q_check(opr_q);
         if (NULL == opr_node || NULL == cmp_node)
         {
-            DBG_TRACE("def_node:%p, cust_node:%p", opr_node, cmp_node);
+            DBG_TRACE("opr_node:%p, cmp_node:%p", opr_node, cmp_node);
             break;
         }
 
         //DBG_TRACE("def_node:%p, cust_node:%p", opr_node, cmp_node);
         ret = cb(cmp_q, cmp_node, opr_node);
         
-        DBG_TRACE("opr_node->cmd_type:%s, opr_q_len:%d, ret=%d"
-                , opr_node->cmd_type, ppkg_queue_get_len(opr_q), ret);
-        if (opr_node != NULL)
-            free(opr_node);
-    }
-    while (ppkg_queue_get_len(opr_q) > 0);
+        DBG_TRACE("opr_q_len:%d, cmp_q_len:%d, ret=%d", q_size(opr_q),  q_size(cmp_q), ret);
 
-    DBG_TRACE("ret:%d", ret);
+        free(opr_node);
+    }
+    while (q_size(opr_q) > 0);
+
+    DBG_TRACE("ppkg_compare_cmd_list ret:%d", ret);
     
     return ret;
 }
@@ -1378,6 +1328,7 @@ static void ppkg_write_buffer_to_file(FILE *fp, char *buff_p, int len)
 *************************************************************************************/
 static int ppkg_assemble_single_command(cmd_node_struct *ini_node)
 {
+    circal_buffer *cir_buff_ptr = &ppkg_cntx_p->cir_buff;
     char *p = NULL;
     int mlc_size = 0;
     int len = 0;
@@ -1400,75 +1351,15 @@ static int ppkg_assemble_single_command(cmd_node_struct *ini_node)
                 ppkg_cntx_p->cmd_cnt);
     ppkg_cntx_p->cmd_cnt++;
     DBG_TRACE("->atfile line:%s, len=%d", p, len);
-    if (ppkg_circal_buff_get_valid_space(&cir_buff) < len)
+    if (ppkg_circal_buff_get_valid_space(cir_buff_ptr) < len)
     {
         /* not enough space for buffer */
-        ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, cir_buff.data, cir_buff.valid_bytes);
-        ppkg_reset_circal_buff(&cir_buff);
+        ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, cir_buff_ptr->data, cir_buff_ptr->valid_bytes);
+        ppkg_reset_circal_buff(cir_buff_ptr);
     }
-    ppkg_write_circal_buff(&cir_buff, p, len);
+    ppkg_write_circal_buff(cir_buff_ptr, p, len);
 
     free(p);
-
-    return len;
-}
-
-/************************************************************************************
-* Function: ppkg_assemble_atfile_body
-* Author @ Date: John.Wang@20200222
-* Input:
-* Return: void
-* Description:  assemble atfile 
-*************************************************************************************/
-static int ppkg_assemble_atfile_body(cfg_list_queue *ini_q
-                , cmd_node_struct *ini_node, cmd_diff_data *diff_data)
-{
-    
-    int len = 0;
-    char *first_cmd_type = NULL;
-    cmd_node_struct *del_node = NULL;
-    int i = 0;
-
-    if (NULL == ini_node)
-    {
-        return 0;
-    }
-    
-    if (!ini_node->is_multi_cmd)
-    {
-        len = ppkg_assemble_single_command(ini_node);
-        //ppkg_queue_del(ini_q, ini_node);
-        //free(ini_node);
-    }
-    else
-    {
-        first_cmd_type = ini_node->cmd_type;
-        DBG_TRACE("first_cmd_type:%s", first_cmd_type);
-        do
-        {
-            DBG_TRACE("diff_id_list:%p, ini_node->id:%d, i:%d, diff_id_num:%d, cmd_type:%s"
-                , diff_data->diff_id_list, ini_node->id, i, diff_data->diff_id_num
-                , ini_node->cmd_type);
-            if (NULL == diff_data->diff_id_list || 
-                diff_data->diff_id_list[i] == ini_node->id)
-            {
-                len = ppkg_assemble_single_command(ini_node);
-                //del_node = ini_node;
-                ini_node = ini_node->next;
-                i++;
-
-                //ppkg_queue_del(ini_q, del_node);
-                //free(del_node);
-            }
-            else
-            {
-                ini_node = ini_node->next;
-            }
-        }
-        while (ini_node != NULL && 
-               i < diff_data->diff_id_num && 
-               (strcmp(first_cmd_type, ini_node->cmd_type) == 0));
-    }
 
     return len;
 }
@@ -1480,9 +1371,16 @@ static int ppkg_assemble_atfile_body(cfg_list_queue *ini_q
 * Return: length of atfile
 * Description: 
 *************************************************************************************/
-static int ppkg_cmp_list_cb_atfile(cfg_list_queue *ini_q
-                , cmd_node_struct *ini_node, cmd_node_struct *diff_node)
+static int ppkg_cmp_list_cb_atfile(queue_type *ini_q
+                , link_type *ini_ptr, link_type *diff_ptr)
 {
+    cmd_node_struct *ini_node = (cmd_node_struct *)ini_ptr;
+    diff_cmd_node   *diff_node = (diff_cmd_node *)diff_ptr;
+    cmd_diff_data   *data_ptr = NULL;
+    link_type       *next_ini_ptr = NULL;
+    char *first_cmd_type = NULL;
+    int i = 0;
+
     if (NULL == diff_node || NULL == ini_node)
     {
         DBG_TRACE("diff_node || ini_node");
@@ -1493,12 +1391,48 @@ static int ppkg_cmp_list_cb_atfile(cfg_list_queue *ini_q
     {
         if (0 == strcmp(diff_node->cmd_type, ini_node->cmd_type))
         {
-            ppkg_assemble_atfile_body(ini_q, ini_node, &(diff_node->diff_data));
+            if (!ini_node->is_multi_cmd)
+            {
+                ppkg_assemble_single_command(ini_node);
+                if (q_delete(ini_q, (link_type *)ini_node) >= 0)
+                {
+                    free(ini_node);  
+                }
+            }
+            else
+            {
+                first_cmd_type = ini_node->cmd_type;
+                DBG_TRACE("first_cmd_type:%s", first_cmd_type);
+                data_ptr = &(diff_node->diff_data);
+                do
+                {
+                    next_ini_ptr = q_next(ini_q , (link_type *)ini_node);
+
+                    DBG_TRACE("diff_id_list:%p, next_ini_ptr:%p, ini_node->id:%d, i:%d, diff_id_num:%d, cmd_type:%s"
+                        , data_ptr->diff_id_list, next_ini_ptr, ini_node->id, i, data_ptr->diff_id_num
+                        , ini_node->cmd_type);
+
+                    if (NULL == data_ptr->diff_id_list || 
+                        data_ptr->diff_id_list[i] == ini_node->id)
+                    {
+                        ppkg_assemble_single_command(ini_node);
+                        i++;
+                        if (q_delete(ini_q, (link_type *)ini_node) >= 0)
+                        {
+                            free(ini_node);  
+                        }
+                    }
+                    ini_node = (cmd_node_struct *)next_ini_ptr;
+                }
+                while (ini_node != NULL && 
+                       i < data_ptr->diff_id_num && 
+                       (strcmp(first_cmd_type, ini_node->cmd_type) == 0));
+            }
             break;
         }
         else
         {
-            ini_node = ini_node->next;
+            ini_node = (cmd_node_struct *)q_next(ini_q, (link_type *)ini_node);
         }
     }
     while (ini_node != NULL);
@@ -1513,9 +1447,9 @@ static int ppkg_cmp_list_cb_atfile(cfg_list_queue *ini_q
 * Return: 
 * Description: 
 *************************************************************************************/
-static void ppkg_assemble_file_head(char* str_line)
+static void ppkg_assemble_file_head(void)
 {
-    ppkg_write_circal_buff(&cir_buff, str_line, strlen(str_line));
+    ppkg_write_circal_buff(&ppkg_cntx_p->cir_buff, AT_FILE_HEAD_STR, strlen(AT_FILE_HEAD_STR));
 }
 
 /************************************************************************************
@@ -1525,24 +1459,24 @@ static void ppkg_assemble_file_head(char* str_line)
 * Return: 
 * Description: 
 *************************************************************************************/
-static void ppkg_assemble_file_tail(int cmd_num)
+static void ppkg_assemble_file_tail(void)
 {
     char buffer[32] = {0};
     int len = 0;
     
-    len = snprintf(buffer, 32, "AtCmd[%d]=%s", cmd_num, AT_FILE_TAIL_STR);
+    len = snprintf(buffer, 32, "AtCmd[%d]=%s", ppkg_cntx_p->cmd_cnt, AT_FILE_TAIL_STR);
 
-    ppkg_write_circal_buff(&cir_buff, buffer, len);
+    ppkg_write_circal_buff(&ppkg_cntx_p->cir_buff, buffer, len);
 }
 
 /************************************************************************************
-* Function: ppkg_destroy_file
+* Function: ppkg_close_file
 * Author @ Date: John.Wang@20200222
 * Input:
 * Return: 
 * Description: 
 *************************************************************************************/
-static void ppkg_destroy_file(FILE *fp)
+static void ppkg_close_file(FILE *fp)
 {
     if (NULL != fp)
     {
@@ -1583,50 +1517,232 @@ static void ppkg_create_file(char *path, ppkg_gen_context *cntx_p)
 }
 
 /************************************************************************************
+* Function: ppkg_com_create
+* Author @ Date: John.Wang@20200411
+* Input:
+* Return: TRUE/FALSE
+* Description: create com port, set com name, baudrate, stop bit, etc...
+*************************************************************************************/
+static bool ppkg_com_create(ppkg_gen_context *cntx_p)
+{
+    if (INVALID_HANDLE_VALUE != cntx_p->com_hdlr)
+    {
+        return TRUE;
+    }
+    
+    cntx_p->com_hdlr = create_com("com4", 115200, 8);
+    if (INVALID_HANDLE_VALUE == cntx_p->com_hdlr)
+    {
+        DBG_TRACE("open com failed!");
+        return FALSE;
+    }   
+
+    return TRUE;
+}
+
+/************************************************************************************
+* Function: ppkg_com_destroy
+* Author @ Date: John.Wang@20200411
+* Input:
+* Return: TRUE/FALSE
+* Description: destroy com port, reset com handle
+*************************************************************************************/
+static void ppkg_com_destroy(ppkg_gen_context *cntx_p)
+{
+    if (INVALID_HANDLE_VALUE != cntx_p->com_hdlr)
+    {
+        destroy_com(cntx_p->com_hdlr);
+        cntx_p->com_hdlr = INVALID_HANDLE_VALUE;
+    }    
+}
+
+/************************************************************************************
+* Function: ppkg_com_write
+* Author @ Date: John.Wang@20200411
+* Input:
+* Return: 
+* Description: 
+*************************************************************************************/
+static int ppkg_com_write(ppkg_gen_context *cntx_p, char *wr_buf, int wr_len)
+{
+    char *buf_ptr = NULL;
+    int real_len = 0;
+    int cmd_len = 0;
+
+    buf_ptr = (char*)malloc(wr_len + 2);
+    if (buf_ptr == NULL)
+    {
+        return 0;
+    }
+    cmd_len = snprintf(buf_ptr, wr_len + 2, "%s%s", wr_buf, "\r\n");
+    real_len = com_write(cntx_p->com_hdlr, buf_ptr, cmd_len);
+
+    free(buf_ptr);
+
+    return real_len;
+}
+
+/************************************************************************************
+* Function: ppkg_com_read
+* Author @ Date: John.Wang@20200411
+* Input:
+* Return: 
+* Description: 
+*************************************************************************************/
+static int ppkg_com_read(ppkg_gen_context *cntx_p, char *rd_buf, int rd_size)
+{
+    int real_len = 0;
+    int rd_len = 0;
+
+    memset(rd_buf, 0, rd_size);
+
+    while(MAX_TEMP_BLOCK_LEN - real_len > 0)
+    {
+        rd_len = com_read(cntx_p->com_hdlr, &rd_buf[real_len], rd_size - real_len);
+        if (rd_len > 0)
+        {
+            real_len += rd_len;
+        }
+        else
+        {
+            break;
+        }
+    }
+    
+    DBG_TRACE("real_len:%d, %s", real_len, rd_buf);
+
+    return real_len;
+}
+
+
+/************************************************************************************
+* Function: ppkg_device_info_check
+* Author @ Date: John.Wang@20200216
+* Input:
+* Return: 
+* Description: check com communication, device information
+*************************************************************************************/
+static bool ppkg_device_info_check(ppkg_gen_context *cntx_p, cfg_info_struct *cfg_info_p)
+{
+    bool ret_val = FALSE;
+
+    if (!ppkg_com_create(cntx_p))
+    {
+        return ret_val;
+    }
+
+    ppkg_com_write(cntx_p, LINE_ATCSUB_CMD, strlen(LINE_ATCSUB_CMD));
+    ppkg_com_read(cntx_p, read_buff, MAX_TEMP_BLOCK_LEN);    
+
+    if (NULL != strstr(read_buff, cfg_info_p->fm_version))
+    {
+        ret_val = TRUE;
+    }
+
+    return ret_val;
+}
+
+
+/************************************************************************************
+* Function: ppkg_init_circal_buff
+* Author @ Date: John.Wang@20200216
+* Input:
+* Return: 
+* Description: 
+*************************************************************************************/
+static void ppkg_init_context(void)
+{
+    memset(ppkg_cntx_p, 0, sizeof(ppkg_gen_context));
+    q_init(&ppkg_cntx_p->default_cfg);
+    q_init(&ppkg_cntx_p->custom_cfg);
+    q_init(&ppkg_cntx_p->custom_ini);
+    q_init(&ppkg_cntx_p->differ_cfg);
+
+    ppkg_init_circal_buff(&ppkg_cntx_p->cir_buff, memory_block);
+    ppkg_cntx_p->com_hdlr = INVALID_HANDLE_VALUE;
+}
+
+/************************************************************************************
 * Function: ppkg_gen
 * Author @ Date: John.Wang@20200216
 * Input:
 * Return: parser result
-* Description: pre-parser of the config file, parameter file
+* Description: pre-parser of the config file, parameter file then generator ATFILE and
+*              config comfirm file.
 *************************************************************************************/
-int ppkg_gen(void)
+gen_result_enum ppkg_gen(void)
 {
-    ppkg_init_context();
-    ppkg_init_circal_buff(&cir_buff, memory_block);
-    ppkg_cmd_list_init(&cmd_list);
+    gen_result_enum ret_val = GEN_SUCCESS;
     
-    if (ppkg_get_cfg_info(&cfg_info) < 0)
+    ppkg_init_context();
+
+    /* parse configuration file get config information, such as file path, 
+     * firmware version, com name, baudrate etc..
+     */
+    if (!ppkg_get_cfg_info(&cfg_info))
     {
         DBG_TRACE("return ppkg_get_cfg_info");
-        return -1;
+        ret_val = GEN_CONFIG_FAIL;
+    }
+    if (ret_val != GEN_SUCCESS) return ret_val;
+
+    /* check com communication, device information */
+    if (!ppkg_device_info_check(ppkg_cntx_p, &cfg_info))
+    {
+        DBG_TRACE("return ppkg_device_info_check");
+        ret_val = GEN_PRE_CHECK;
+    }
+    if (ret_val != GEN_SUCCESS)
+    {
+        ppkg_com_destroy(ppkg_cntx_p);
+        return ret_val;
     }
 
-    if (ppkg_build_cmd_list(cfg_info.path_def_cfg, &cmd_list.def_cfg) &&
-        ppkg_build_cmd_list(cfg_info.path_cust_cfg, &cmd_list.cust_cfg) &&
-        ppkg_build_cmd_list(cfg_info.path_cust_ini, &cmd_list.cust_ini) >= 0)
+    /* build default configuration queue, custom configuration queue and custom command queue */
+    if (ppkg_build_cmd_list(cfg_info.path_def_cfg, &ppkg_cntx_p->default_cfg) &&
+        ppkg_build_cmd_list(cfg_info.path_cust_cfg, &ppkg_cntx_p->custom_cfg) &&
+        ppkg_build_cmd_list(cfg_info.path_cust_ini, &ppkg_cntx_p->custom_ini) >= 0)
     {
         DBG_TRACE("def_cfg->len:%d cust_cfg->len:%d, cust_ini->len:%d",
-                cmd_list.def_cfg.len, cmd_list.cust_cfg.len, cmd_list.cust_ini.len);
+                q_size(&ppkg_cntx_p->default_cfg), 
+                q_size(&ppkg_cntx_p->custom_cfg), 
+                q_size(&ppkg_cntx_p->custom_ini));
+    }
+    else
+    {
+        ret_val = GEN_CMD_LIST_FAIL;
+    }
+    if (ret_val != GEN_SUCCESS)
+    {
+        ppkg_com_destroy(ppkg_cntx_p);
+        return ret_val;
     }
 
+    /* compare default configuration queue and custom configuration queue, then generate ATFILE */
     ppkg_create_file(AT_CFG_FILE_NAME, ppkg_cntx_p);
-    ppkg_assemble_file_head(AT_FILE_HEAD_STR);
-    if (ppkg_compare_cmd_list(&cmd_list.def_cfg, &cmd_list.cust_cfg, ppkg_cmp_list_cb_diff) &&
-        ppkg_compare_cmd_list(&cmd_list.cust_ini, &cmd_list.diff_cfg, ppkg_cmp_list_cb_atfile))
+    ppkg_assemble_file_head();
+    if (ppkg_compare_cmd_list(&ppkg_cntx_p->default_cfg, &ppkg_cntx_p->custom_cfg, ppkg_cmp_list_cb_diff) &&
+        ppkg_compare_cmd_list(&ppkg_cntx_p->custom_ini, &ppkg_cntx_p->differ_cfg, ppkg_cmp_list_cb_atfile))
     {
         DBG_TRACE("build AT file");
-        ppkg_assemble_file_tail(ppkg_cntx_p->cmd_cnt);
-        ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, cir_buff.data, cir_buff.valid_bytes);
-        ppkg_reset_circal_buff(&cir_buff);
+        ppkg_assemble_file_tail();
+        ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, ppkg_cntx_p->cir_buff.data, ppkg_cntx_p->cir_buff.valid_bytes);
+        ppkg_reset_circal_buff(&ppkg_cntx_p->cir_buff);
     }
     else
     {
         DBG_TRACE("failed to build AT file");
-        ppkg_destroy_file(ppkg_cntx_p->temp_fp);
-        return -4;
+        ppkg_close_file(ppkg_cntx_p->temp_fp);
+        ret_val = GEN_ATFILE;
     }
-    ppkg_destroy_file(ppkg_cntx_p->temp_fp);
-    
-    return 0;
+    if (ret_val != GEN_SUCCESS)
+    {
+        ppkg_com_destroy(ppkg_cntx_p);
+        ppkg_close_file(ppkg_cntx_p->temp_fp);
+        return ret_val;
+    }
+
+    /* generate config confirm file */
+    return ret_val;
 }
 
