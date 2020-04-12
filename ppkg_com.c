@@ -203,8 +203,6 @@ bool com_read(HANDLE hCom, char* read_buf, int buf_size, int *read_len)
     DWORD wCount = 0;
     unsigned char bReadStat;
     char buff[MAX_BUF_SIZE] = {0};
-    int i = 0;
-    int min_buff_size = MAX_BUF_SIZE;
     bool result = FALSE;
     int rd_len = 0;
 
