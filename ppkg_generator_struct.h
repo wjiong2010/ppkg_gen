@@ -26,6 +26,7 @@
 #define MAX_CMD_LIST_SIZE   1000
 #define MAX_LEN_CMD_TYPE    3
 #define MAX_TEMP_BUFF_LEN   512
+#define MAX_QUERY_CMD_LEN   32
 #define MAX_COMMAND_NUM     0x0fffffff
 
 #define T_FILE_READ_ONLY		"r"
@@ -64,6 +65,7 @@ MetaResult[1]=OK
 #define AT_FILE_HEAD_STR    "[ConfirMeta]\r\n\r\n"
 #define AT_FILE_TAIL_STR    "THE END"
 #define AT_CFG_FILE_NAME    "ATFILE.ini"
+#define AT_CFM_FILE_NAME    "CFMFILE.ini"
 #define COMMA_SEPARATOR     ','
 /************************************************************************************
 * Enums
@@ -81,7 +83,8 @@ typedef enum {
     GEN_CMD_LIST_FAIL = -2,
     GEN_ATFILE = -3,
     GEN_COMM = -4,
-    GEN_PRE_CHECK = -5,    
+    GEN_PRE_CHECK = -5,
+    GEN_CONFIRM = -6
 } gen_result_enum;
 
 
@@ -93,6 +96,7 @@ typedef struct {
     char path_def_cfg[MAX_LEN_PATH];
     char path_cust_cfg[MAX_LEN_PATH];
     char path_cust_ini[MAX_LEN_PATH];
+    char password[MAX_LEN_PATH];
 } cfg_info_struct;
 
 typedef struct _node {
@@ -118,8 +122,6 @@ typedef struct {
     bool        is_multi_cmd;
     cmd_diff_data diff_data;
 } diff_cmd_node;
-
-
 
 typedef struct {
     link_type   qlink;
@@ -155,6 +157,7 @@ typedef struct {
     queue_type  custom_cfg;
     queue_type  custom_ini;
     queue_type  differ_cfg;
+    queue_type  at_queue;
     HCOM        com_hdlr;
     circal_buffer cir_buff;
 } ppkg_gen_context;

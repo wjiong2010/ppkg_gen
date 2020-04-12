@@ -493,10 +493,12 @@ static bool ppkg_get_cfg_info(cfg_info_struct *cfg_info_p)
 
     memset(cfg_info_p, 0, sizeof(cfg_info_struct));
     
-    strcpy(cfg_info_p->fm_version, "GV300NR00A17V21M128");
+    //strcpy(cfg_info_p->fm_version, "GV300NR00A17V21M128");
+    strcpy(cfg_info_p->fm_version, "GV300NR00A04V07M128");
     strcpy(cfg_info_p->path_def_cfg, "D:\\forfun\\paramPackage_test\\A04V07_default.gv300");
     strcpy(cfg_info_p->path_cust_cfg, "D:\\forfun\\paramPackage_test\\C_GV300_A04V07_M0_0.gv300");
     strcpy(cfg_info_p->path_cust_ini, "D:\\forfun\\paramPackage_test\\C_GV300_A04V07_M0_0_at.ini");
+    strcpy(cfg_info_p->password, "gv300");
 
     DBG_TRACE("cfg_info_p->fm_version:%s", cfg_info_p->fm_version);
     
@@ -560,22 +562,24 @@ static int ppkg_read_file(FILE *fp, circal_buffer *cir_buf)
 * Return: 
 * Description: 
 *************************************************************************************/
-static int ppkg_get_cmd_type(char *cmd_type, const char *cmd_str, line_type_enum line_type)
+static int ppkg_get_cmd_type(char *cmd_type, char *cmd_str, line_type_enum line_type)
 {
+    int ret_val = 0;
+
     if (CFG_LINE == line_type)
     {
         /* <Command Type="GTPIN" EnableAutoUnlockPIN="0" PIN="" /> */
         memcpy(cmd_type, (void*)(cmd_str + CMD_FRAME_HEAD_LEN + 1 + CMD_PREFIX_LEN), MAX_LEN_CMD_TYPE);
-        return (CMD_FRAME_HEAD_LEN + 1 + CMD_PREFIX_LEN);
+        ret_val = (CMD_FRAME_HEAD_LEN + 1 + CMD_PREFIX_LEN);
     }
     else if (CMD_LINE == line_type)
     {
         /* AT+GTPIN=gv300,0,,,,,,,FFFF$ */
         memcpy(cmd_type, (void*)(cmd_str + CMD_ATGT_HEAD_LEN), MAX_LEN_CMD_TYPE);
-        return 0;
+        ret_val = 0;
     }
 
-    return 0;
+    return ret_val;
 }
 
 /************************************************************************************
@@ -765,7 +769,6 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, queue_type *queue_p)
     {
         DBG_TRACE("unknow line type");
     }
-        
 
     return ret;
 }
@@ -836,6 +839,31 @@ static bool ppkg_is_ignore_cmd(const char* cmd_type)
         if (strcmp(command_attr_table[i++].cmd_name, cmd_type) == 0)
         {
             ret = command_attr_table[i++].ignored;
+            break;
+        }
+    }
+    //DBG_TRACE("ret:%d, [%s,%s]", ret, multi_cmd_type[i], cmd_type);    
+
+    return ret;
+}
+
+/************************************************************************************
+* Function: ppkg_is_multi_cmd
+* Author @ Date: John.Wang@20200412
+* Input:
+* Return: TRUE: is multi-command FALSE is not...
+* Description: check is multi command by given command type
+*************************************************************************************/
+static bool ppkg_is_multi_cmd(const char* cmd_type)
+{
+    int i = 0;
+    bool ret = FALSE;
+    
+    while (NULL != command_attr_table[i].cmd_name)
+    {
+        if (strcmp(command_attr_table[i++].cmd_name, cmd_type) == 0)
+        {
+            ret = (bool)(command_attr_table[i++].id_pos != 0);
             break;
         }
     }
@@ -1210,7 +1238,6 @@ static int ppkg_cmp_list_cb_diff(queue_type *def_q
         //DBG_TRACE("ppkg_cmp_list_cb_diff[%s, %s]", cust_node->cmd_type, def_node->cmd_type);
         if (0 == strcmp(cust_node->cmd_type, def_node->cmd_type))
         {
-            //if (0 != strcmp(cust_node->cmd_str, def_node->cmd_str))
             if (!ppkg_cmd_compare(def_node, cust_node, &diff_data))
             {
                 if ((diff_node = (diff_cmd_node *)malloc(sizeof(diff_cmd_node))) == NULL)
@@ -1313,10 +1340,10 @@ static int ppkg_compare_cmd_list(
 * Return: void
 * Description:  
 *************************************************************************************/
-static void ppkg_write_buffer_to_file(FILE *fp, char *buff_p, int len)
+static void ppkg_write_buffer_to_file(FILE *fp, circal_buffer *c_buffer)
 {
-    if (fp != NULL && buff_p != NULL && len != 0)
-        fwrite(buff_p, 1, len, fp);
+    if (fp != NULL && c_buffer != NULL && c_buffer->valid_bytes != 0)
+        fwrite(c_buffer->data, 1, c_buffer->valid_bytes, fp);
 }
 
 /************************************************************************************
@@ -1354,7 +1381,7 @@ static int ppkg_assemble_single_command(cmd_node_struct *ini_node)
     if (ppkg_circal_buff_get_valid_space(cir_buff_ptr) < len)
     {
         /* not enough space for buffer */
-        ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, cir_buff_ptr->data, cir_buff_ptr->valid_bytes);
+        ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, cir_buff_ptr);
         ppkg_reset_circal_buff(cir_buff_ptr);
     }
     ppkg_write_circal_buff(cir_buff_ptr, p, len);
@@ -1379,7 +1406,9 @@ static int ppkg_cmp_list_cb_atfile(queue_type *ini_q
     cmd_diff_data   *data_ptr = NULL;
     link_type       *next_ini_ptr = NULL;
     char *first_cmd_type = NULL;
+    queue_type      *at_queue_ptr = NULL;
     int i = 0;
+    at_queue_ptr = &ppkg_cntx_p->at_queue;
 
     if (NULL == diff_node || NULL == ini_node)
     {
@@ -1396,7 +1425,8 @@ static int ppkg_cmp_list_cb_atfile(queue_type *ini_q
                 ppkg_assemble_single_command(ini_node);
                 if (q_delete(ini_q, (link_type *)ini_node) >= 0)
                 {
-                    free(ini_node);  
+                    //free(ini_node);  
+                    q_put(at_queue_ptr, (link_type *)ini_node);
                 }
             }
             else
@@ -1419,7 +1449,8 @@ static int ppkg_cmp_list_cb_atfile(queue_type *ini_q
                         i++;
                         if (q_delete(ini_q, (link_type *)ini_node) >= 0)
                         {
-                            free(ini_node);  
+                            //free(ini_node);
+                            q_put(at_queue_ptr, (link_type *)ini_node);
                         }
                     }
                     ini_node = (cmd_node_struct *)next_ini_ptr;
@@ -1569,12 +1600,13 @@ static int ppkg_com_write(ppkg_gen_context *cntx_p, char *wr_buf, int wr_len)
     int real_len = 0;
     int cmd_len = 0;
 
-    buf_ptr = (char*)malloc(wr_len + 2);
+    buf_ptr = (char*)malloc(wr_len + 3);
     if (buf_ptr == NULL)
     {
         return 0;
     }
-    cmd_len = snprintf(buf_ptr, wr_len + 2, "%s%s", wr_buf, "\r\n");
+    memset(buf_ptr, 0, (wr_len + 3));
+    cmd_len = snprintf(buf_ptr, wr_len + 3, "%s%s", wr_buf, "\r\n");
     real_len = com_write(cntx_p->com_hdlr, buf_ptr, cmd_len);
 
     free(buf_ptr);
@@ -1595,11 +1627,10 @@ static int ppkg_com_read(ppkg_gen_context *cntx_p, char *rd_buf, int rd_size)
     int rd_len = 0;
 
     memset(rd_buf, 0, rd_size);
-
+#if 0
     while(MAX_TEMP_BLOCK_LEN - real_len > 0)
     {
-        rd_len = com_read(cntx_p->com_hdlr, &rd_buf[real_len], rd_size - real_len);
-        if (rd_len > 0)
+        if (com_read(cntx_p->com_hdlr, &rd_buf[real_len], rd_size - real_len, &rd_len))
         {
             real_len += rd_len;
         }
@@ -1608,7 +1639,12 @@ static int ppkg_com_read(ppkg_gen_context *cntx_p, char *rd_buf, int rd_size)
             break;
         }
     }
-    
+#else
+    if (com_read(cntx_p->com_hdlr, rd_buf, rd_size, &rd_len))
+    {
+        real_len = rd_len;
+    }
+#endif
     DBG_TRACE("real_len:%d, %s", real_len, rd_buf);
 
     return real_len;
@@ -1642,6 +1678,208 @@ static bool ppkg_device_info_check(ppkg_gen_context *cntx_p, cfg_info_struct *cf
     return ret_val;
 }
 
+/************************************************************************************
+* Function: ppkg_assem_confirm_info_single_line
+* Author @ Date: John.Wang@20200411
+* Input:
+* Return: 
+* Description: 
+*************************************************************************************/
+static int ppkg_assem_confirm_info_single_line(
+            char *buf_ptr, int buf_size, char *cfm_str, 
+            int total_len, int cmd_cnt, int sub_cnt)
+{
+    char *p, *q;
+    int  comma_skip = 0;
+    int  ret_len = 0;
+
+    if (0 == sub_cnt)
+    {
+        ret_len = snprintf((char*)(buf_ptr + ret_len), buf_size - ret_len, "MetaResult[%d]=", cmd_cnt);
+    }
+    else
+    {
+        ret_len = snprintf((char*)(buf_ptr + ret_len), buf_size - ret_len, "MetaResult[%d-%d]=", cmd_cnt, sub_cnt);
+    }
+    /* get confirm information 
+     * step 1: search the second ',' from head to tail
+     * step 2: search the first ',' from tail to head
+     */
+    /* step 1 */
+    p = cfm_str;
+    q = NULL;
+    while ( comma_skip < 2 && 
+            p != NULL &&
+            p - cfm_str < total_len
+          )
+    {
+        p = strchr(p, COMMA_SEPARATOR);
+        if (NULL == p) break;
+        comma_skip++;
+        p++;
+    }
+
+    /* step 2 */
+    if (2 == comma_skip && NULL != p) q = strrchr(p, COMMA_SEPARATOR);
+    if (NULL != q)
+    {
+        *(q + 1) = (char)0;
+        ret_len += snprintf((char*)(buf_ptr + ret_len), buf_size - ret_len, "%s", p);
+    }
+
+    return ret_len;
+}
+
+/************************************************************************************
+* Function: ppkg_assem_confirm_info
+* Author @ Date: John.Wang@20200412
+* Input:
+* Return:
+* Description:
+*************************************************************************************/
+static int ppkg_assem_confirm_info(char *buf_ptr, int buf_size, char *cfm_str, char *cmd_type, int cmd_cnt)
+{
+    bool is_multi_cmd = ppkg_is_multi_cmd(cmd_type);
+    char *p, *q;
+    int  total_len = 0;
+    int  ret_len = 0;
+    int  sub_count = 0;
+
+    total_len = strlen(cfm_str);
+
+    DBG_TRACE("total_len=%d, buf_size:%d", total_len, buf_size);
+
+    if (!is_multi_cmd || 0 == strcmp(cmd_type, "FFC"))
+    {
+        ret_len = ppkg_assem_confirm_info_single_line(buf_ptr, buf_size, cfm_str, total_len, cmd_cnt, 0);
+        ret_len += snprintf((char*)(buf_ptr + ret_len), buf_size - ret_len, "\r\n\r\n");
+    }
+    else
+    {
+        p = q = cfm_str;
+
+        /* search for tail of a single line, end by "0x0d 0x0a 0x0d 0x0a" */
+        while((p = strchr(q, '\r')) != NULL && p - cfm_str < total_len)
+        {
+            while ((*p == '\r' || *p == '\n') && p - cfm_str < total_len) p++;
+
+            /* skip query command echo, such as: AT+GTCLT?"gv300" */
+            if (strstr(q, "?\"") != NULL)
+            {
+                q = p;
+                continue;
+            }
+
+            if (p - q < 7)
+            {
+                DBG_TRACE("All confirm info packaged");
+                break;
+            }
+
+            memset(temp_buff, 0, MAX_TEMP_BLOCK_LEN);
+            memcpy(temp_buff, q, p - q);
+            ret_len += ppkg_assem_confirm_info_single_line(
+                            (char*)(buf_ptr + ret_len), 
+                            buf_size - ret_len, 
+                            temp_buff, 
+                            p - q,
+                            cmd_cnt,
+                            sub_count++
+                            );
+            DBG_TRACE("ret_len=%d, buf_size:%d", ret_len, buf_size - ret_len);
+            ret_len += snprintf((char*)(buf_ptr + ret_len), buf_size - ret_len, "\r\n");
+            q = p;
+        }
+        ret_len += snprintf((char*)(buf_ptr + ret_len), buf_size - ret_len, "\r\n");
+    }
+
+    return ret_len;
+}
+
+/************************************************************************************
+* Function: ppkg_build_confirm_file
+* Author @ Date: John.Wang@20200412
+* Input:
+* Return:
+* Description:
+*************************************************************************************/
+static bool ppkg_build_confirm_file(ppkg_gen_context *cntx_p, cfg_info_struct *cfg_ptr)
+{
+    queue_type      *at_queue_ptr = NULL;
+    cmd_node_struct *at_node = NULL;
+    circal_buffer   *cbuf_ptr = NULL;
+    char    query_cmd[MAX_QUERY_CMD_LEN] = {0};
+    char    pre_cmd_type[MAX_LEN_CMD_TYPE + 1] = {0};
+    char    *mlc_ptr = NULL;
+    int     length = 0;
+    int     read_len = 0;
+
+    at_queue_ptr = &cntx_p->at_queue;
+    cbuf_ptr = &cntx_p->cir_buff;
+    ppkg_cntx_p->cmd_cnt = 0;
+
+    do
+    {
+        at_node = (cmd_node_struct *)q_check(at_queue_ptr);
+        if (NULL == at_node)
+        {
+            break;
+        }
+
+        ppkg_com_write(cntx_p, at_node->cmd_str, at_node->cmd_len);
+        ppkg_com_read(cntx_p, read_buff, MAX_TEMP_BLOCK_LEN);
+
+        if (0 == strlen(pre_cmd_type))
+        {
+            strcpy(pre_cmd_type, at_node->cmd_type);
+        }
+        else if (strcmp(pre_cmd_type, at_node->cmd_type) != 0
+                 || 0 == q_size(at_queue_ptr))
+        {
+            Sleep(100);
+            /*AT+GTPEO?"gv300"*/
+            length = snprintf(query_cmd, MAX_QUERY_CMD_LEN, "%s%s?\"%s\"", LINE_ATGT_CMD, pre_cmd_type, cfg_ptr->password);
+            ppkg_com_write(cntx_p, query_cmd, length);
+            read_len = ppkg_com_read(cntx_p, read_buff, MAX_TEMP_BLOCK_LEN);
+            if (0 == read_len)
+            {
+                DBG_TRACE("read failed");
+                break;
+            }
+
+            if ((mlc_ptr = (char *)malloc(read_len)) == NULL)
+            {
+                DBG_TRACE("malloc failed");
+                break;
+            }
+            DBG_TRACE("mlc_ptr:%p, mlc_size=%d", mlc_ptr, read_len);
+            memset(mlc_ptr, 0, read_len);
+
+            length = snprintf(mlc_ptr, read_len, "AtCmd[%d]=%s\r\n", ppkg_cntx_p->cmd_cnt, query_cmd);
+
+            length += ppkg_assem_confirm_info((char*)(mlc_ptr + length), read_len, read_buff, pre_cmd_type, ppkg_cntx_p->cmd_cnt);
+            if (ppkg_circal_buff_get_valid_space(cbuf_ptr) < length)
+            {
+                /* not enough space for buffer */
+                ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, cbuf_ptr);
+                ppkg_reset_circal_buff(cbuf_ptr);
+            }
+            ppkg_write_circal_buff(cbuf_ptr, mlc_ptr, length);
+            free(mlc_ptr);
+
+            memcpy(pre_cmd_type, at_node->cmd_type, MAX_LEN_CMD_TYPE);
+
+            ppkg_cntx_p->cmd_cnt++;
+        }
+
+        free(at_node);
+        Sleep(1000);
+    }
+    while (q_size(at_queue_ptr) > 0);
+
+    return TRUE;
+}
+
 
 /************************************************************************************
 * Function: ppkg_init_circal_buff
@@ -1657,6 +1895,7 @@ static void ppkg_init_context(void)
     q_init(&ppkg_cntx_p->custom_cfg);
     q_init(&ppkg_cntx_p->custom_ini);
     q_init(&ppkg_cntx_p->differ_cfg);
+    q_init(&ppkg_cntx_p->at_queue);
 
     ppkg_init_circal_buff(&ppkg_cntx_p->cir_buff, memory_block);
     ppkg_cntx_p->com_hdlr = INVALID_HANDLE_VALUE;
@@ -1726,23 +1965,38 @@ gen_result_enum ppkg_gen(void)
     {
         DBG_TRACE("build AT file");
         ppkg_assemble_file_tail();
-        ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, ppkg_cntx_p->cir_buff.data, ppkg_cntx_p->cir_buff.valid_bytes);
+        ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, &ppkg_cntx_p->cir_buff);
         ppkg_reset_circal_buff(&ppkg_cntx_p->cir_buff);
     }
     else
     {
         DBG_TRACE("failed to build AT file");
-        ppkg_close_file(ppkg_cntx_p->temp_fp);
         ret_val = GEN_ATFILE;
     }
+    ppkg_close_file(ppkg_cntx_p->temp_fp);
     if (ret_val != GEN_SUCCESS)
     {
         ppkg_com_destroy(ppkg_cntx_p);
-        ppkg_close_file(ppkg_cntx_p->temp_fp);
         return ret_val;
     }
 
     /* generate config confirm file */
+    ppkg_create_file(AT_CFM_FILE_NAME, ppkg_cntx_p);
+    ppkg_assemble_file_head();
+    if (ppkg_build_confirm_file(ppkg_cntx_p, &cfg_info))
+    {
+        DBG_TRACE("build CFM file");
+        ppkg_assemble_file_tail();
+        ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, &ppkg_cntx_p->cir_buff);
+    }
+    else
+    {
+        DBG_TRACE("failed to build CFM file");
+        ret_val = GEN_CONFIRM;
+    }
+    ppkg_close_file(ppkg_cntx_p->temp_fp);
+    ppkg_com_destroy(ppkg_cntx_p);
+
     return ret_val;
 }
 
