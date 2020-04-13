@@ -1289,6 +1289,30 @@ static int ppkg_cmp_list_cb_diff(queue_type *def_q
 }
 
 /************************************************************************************
+* Function: ppkg_release_queue
+* Author @ Date: John.Wang@20200413
+* Input:
+* Return:
+* Description:
+*************************************************************************************/
+static void ppkg_release_queue(queue_type *queue_p)
+{
+    link_type *p_node = NULL;
+    do
+    {
+        p_node = q_check(queue_p);
+        if (NULL == p_node)
+        {
+            break;
+        }
+        free(p_node);
+    }
+    while (q_size(queue_p) > 0);
+    q_destroy(queue_p);
+}
+
+
+/************************************************************************************
 * Function: ppkg_compare_cmd_list
 * Author @ Date: John.Wang@20200216
 * Input:
@@ -1327,6 +1351,9 @@ static int ppkg_compare_cmd_list(
         free(opr_node);
     }
     while (q_size(opr_q) > 0);
+
+    q_destroy(opr_q);
+    ppkg_release_queue(cmp_q);
 
     DBG_TRACE("ppkg_compare_cmd_list ret:%d", ret);
     
