@@ -950,7 +950,7 @@ static int ppkg_get_key_param_info(char *cmd_str,
         /* For example: keyword is "Mode" we found "FRIMode0" 
          * this word should be skipped
          */
-        if (*(q -1) != ' ')
+        if (*(q - 1) != ' ')
         {
             p = q + key_len;
             continue;
@@ -1015,7 +1015,6 @@ static bool ppkg_cmd_keyword_compare(char *key, char *def_str,
                 ppkg_insert_command_id(id, diff_data);
 
             ret = FALSE;
-            //break;
         }
         memset(def_value, 0, MAX_TEMP_BUFF_LEN);
         memset(cust_value, 0, MAX_TEMP_BUFF_LEN);
@@ -1452,7 +1451,6 @@ static int ppkg_cmp_list_cb_atfile(queue_type *ini_q
                 ppkg_assemble_single_command(ini_node);
                 if (q_delete(ini_q, (link_type *)ini_node) >= 0)
                 {
-                    //free(ini_node);  
                     q_put(at_queue_ptr, (link_type *)ini_node);
                 }
             }
@@ -1476,7 +1474,6 @@ static int ppkg_cmp_list_cb_atfile(queue_type *ini_q
                         i++;
                         if (q_delete(ini_q, (link_type *)ini_node) >= 0)
                         {
-                            //free(ini_node);
                             q_put(at_queue_ptr, (link_type *)ini_node);
                         }
                     }
@@ -1706,28 +1703,44 @@ static bool ppkg_device_info_check(ppkg_gen_context *cntx_p, cfg_info_struct *cf
 }
 
 /************************************************************************************
+* Function: ppkg_assem_confirm_info_single_line_head
+* Author @ Date: John.Wang@20200411
+* Input:
+* Return: 
+* Description: 
+*************************************************************************************/
+static int ppkg_assem_confirm_info_single_line_head(
+            char *buf_ptr, int buf_size, int cmd_cnt, int sub_cnt)
+{
+    int  ret_len = 0;
+
+    if (0 == sub_cnt)
+    {
+        ret_len = snprintf(buf_ptr, buf_size, "MetaResult[%d]=", cmd_cnt);
+    }
+    else
+    {
+        ret_len = snprintf(buf_ptr, buf_size, "MetaResult[%d-%d]=", cmd_cnt, sub_cnt);
+    }
+
+    return ret_len;
+}
+
+
+/************************************************************************************
 * Function: ppkg_assem_confirm_info_single_line
 * Author @ Date: John.Wang@20200411
 * Input:
 * Return: 
 * Description: 
 *************************************************************************************/
-static int ppkg_assem_confirm_info_single_line(
-            char *buf_ptr, int buf_size, char *cfm_str, 
-            int total_len, int cmd_cnt, int sub_cnt)
+static int ppkg_assem_confirm_info_single_line_body(
+            char *buf_ptr, int buf_size, char *cfm_str, int total_len)
 {
     char *p, *q;
     int  comma_skip = 0;
     int  ret_len = 0;
 
-    if (0 == sub_cnt)
-    {
-        ret_len = snprintf((char*)(buf_ptr + ret_len), buf_size - ret_len, "MetaResult[%d]=", cmd_cnt);
-    }
-    else
-    {
-        ret_len = snprintf((char*)(buf_ptr + ret_len), buf_size - ret_len, "MetaResult[%d-%d]=", cmd_cnt, sub_cnt);
-    }
     /* get confirm information 
      * step 1: search the second ',' from head to tail
      * step 2: search the first ',' from tail to head
@@ -1764,61 +1777,61 @@ static int ppkg_assem_confirm_info_single_line(
 * Return:
 * Description:
 *************************************************************************************/
-static int ppkg_assem_confirm_info(char *buf_ptr, int buf_size, char *cfm_str, char *cmd_type, int cmd_cnt)
+static int ppkg_assem_confirm_info(char *buf_ptr, int buf_size, 
+                    char *cfm_str, char *cmd_type, int cmd_cnt)
 {
     bool is_multi_cmd = ppkg_is_multi_cmd(cmd_type);
     char *p, *q;
-    int  total_len = 0;
+    int  total_len = strlen(cfm_str);
     int  ret_len = 0;
     int  sub_count = 0;
-
-    total_len = strlen(cfm_str);
+    int  line_len = 0;
 
     DBG_TRACE("total_len=%d, buf_size:%d", total_len, buf_size);
 
-    if (!is_multi_cmd || 0 == strcmp(cmd_type, "FFC"))
-    {
-        ret_len = ppkg_assem_confirm_info_single_line(buf_ptr, buf_size, cfm_str, total_len, cmd_cnt, 0);
-        ret_len += snprintf((char*)(buf_ptr + ret_len), buf_size - ret_len, "\r\n\r\n");
-    }
-    else
-    {
-        p = q = cfm_str;
+    p = q = cfm_str;
 
-        /* search for tail of a single line, end by "0x0d 0x0a 0x0d 0x0a" */
-        while((p = strchr(q, '\r')) != NULL && p - cfm_str < total_len)
+    /* search for tail of a single line, end by "0x0d 0x0a 0x0d 0x0a" */
+    while((p = strchr(q, '\r')) != NULL && p - cfm_str < total_len)
+    {
+        while ((*p == '\r' || *p == '\n') && p - cfm_str < total_len) p++;
+
+        /* skip query command echo, such as: AT+GTCLT?"gv300" */
+        if (strstr(q, "?\"") != NULL)
         {
-            while ((*p == '\r' || *p == '\n') && p - cfm_str < total_len) p++;
-
-            /* skip query command echo, such as: AT+GTCLT?"gv300" */
-            if (strstr(q, "?\"") != NULL)
-            {
-                q = p;
-                continue;
-            }
-
-            if (p - q < 7)
-            {
-                DBG_TRACE("All confirm info packaged");
-                break;
-            }
-
-            memset(temp_buff, 0, MAX_TEMP_BLOCK_LEN);
-            memcpy(temp_buff, q, p - q);
-            ret_len += ppkg_assem_confirm_info_single_line(
-                            (char*)(buf_ptr + ret_len), 
-                            buf_size - ret_len, 
-                            temp_buff, 
-                            p - q,
-                            cmd_cnt,
-                            sub_count++
-                            );
-            DBG_TRACE("ret_len=%d, buf_size:%d", ret_len, buf_size - ret_len);
-            ret_len += snprintf((char*)(buf_ptr + ret_len), buf_size - ret_len, "\r\n");
             q = p;
+            continue;
         }
+
+        /* ignore useless contents, like: OK */
+        line_len = p - q;
+        if (line_len < 7)
+        {
+            DBG_TRACE("All confirm info packaged");
+            break;
+        }
+
+        memset(temp_buff, 0, MAX_TEMP_BLOCK_LEN);
+        memcpy(temp_buff, q, line_len);
+
+        ret_len += ppkg_assem_confirm_info_single_line_head(
+                        (char*)(buf_ptr + ret_len), 
+                        buf_size - ret_len,
+                        cmd_cnt,
+                        sub_count++
+                        );
+        ret_len += ppkg_assem_confirm_info_single_line_body(
+                        (char*)(buf_ptr + ret_len), 
+                        buf_size - ret_len, 
+                        temp_buff, 
+                        p - q
+                        );
+        DBG_TRACE("ret_len=%d, buf_size:%d", ret_len, buf_size - ret_len);
         ret_len += snprintf((char*)(buf_ptr + ret_len), buf_size - ret_len, "\r\n");
+
+        q = p;
     }
+    ret_len += snprintf((char*)(buf_ptr + ret_len), buf_size - ret_len, "\r\n");
 
     return ret_len;
 }
@@ -1903,6 +1916,8 @@ static bool ppkg_build_confirm_file(ppkg_gen_context *cntx_p, cfg_info_struct *c
         Sleep(1000);
     }
     while (q_size(at_queue_ptr) > 0);
+
+    q_destroy(at_queue_ptr);
 
     return TRUE;
 }
