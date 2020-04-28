@@ -991,7 +991,7 @@ static int ppkg_get_key_param_info(char *cmd_str,
 * Return: id of sub command, for
 * Description: 
 *************************************************************************************/
-static bool ppkg_cmd_keyword_compare(char *key, char *def_str, 
+static bool ppkg_cmd_keyword_compare(char *key, char* cmd_type, char *def_str,
                         char *cust_str, cmd_diff_data *diff_data)
 {
     int id = -1;
@@ -1005,6 +1005,21 @@ static bool ppkg_cmd_keyword_compare(char *key, char *def_str,
     while((l1 = ppkg_get_key_param_info((char*)(def_str + def_len), key, NULL, def_value)) > 0 && 
           (l2 = ppkg_get_key_param_info((char*)(cust_str + cust_len), key, &id, cust_value)) > 0)
     {
+        if (strcmp("PEO", cmd_type) == 0)
+        {
+            /* GEOID="5" */
+            char *p = strstr((cust_str + cust_len), "GEOID=");
+            char *q = NULL;
+
+            p += (strlen("GEOID=") + 1); /* Skip left " */
+            q = p;
+            p = strchr(q, '"');
+            if (p != NULL)
+            {
+                *p = (char)0;
+                id = atoi(q);
+            }
+        }
         def_len += l1;
         cust_len += l2;
         DBG_TRACE("def_len:%d, cust_len:%d, def_value:%s, cust_value:%s, id:%d"
@@ -1054,13 +1069,14 @@ static bool ppkg_get_multi_cmd_str(char *flag, char *sub_str, int *id, char *cmd
             continue;
         }
 
-        if (!k)
+        if (NULL == k)
         {
             p = q + flag_len;
             k = q; /* record the head of sub_str to k */
         }
         else
         {
+            /* means we already found the head of sub_str to k */
             break;
         }
     }
@@ -1154,6 +1170,22 @@ static bool ppkg_cmd_compare(cmd_node_struct *def_node
                 cparse_len += clen;
                 dparse_len += dlen;
 
+                if (strcmp("PEO", cust_node->cmd_type) == 0)
+                {
+                    /* GEOID="5" */
+                    char *p = strstr(csub_str, "GEOID=");
+                    char *q = NULL;
+
+                    p += (strlen("GEOID=") + 1); /* Skip left " */
+                    q = p;
+                    p = strchr(q, '"');
+                    if (p != NULL)
+                    {
+                        *p = (char)0;
+                        id = atoi(q);
+                    }
+                }
+
                 if (clen != dlen || 
                     strcmp(csub_str, dsub_str))
                 {
@@ -1186,10 +1218,11 @@ static bool ppkg_cmd_compare(cmd_node_struct *def_node
                 key_word_len++;
                 parsed_len += key_word_len;
                 
-                if (!ppkg_cmd_keyword_compare(key_word, def_node->cmd_str, cust_node->cmd_str, diff_data))
-                {
-                    ret = FALSE;
-                }
+                ret = ppkg_cmd_keyword_compare(key_word, 
+                            cust_node->cmd_type,
+                            def_node->cmd_str,
+                            cust_node->cmd_str,
+                            diff_data);
             }
             else
             {
@@ -1780,7 +1813,7 @@ static int ppkg_assem_confirm_info_single_line_body(
 static int ppkg_assem_confirm_info(char *buf_ptr, int buf_size, 
                     char *cfm_str, char *cmd_type, int cmd_cnt)
 {
-    bool is_multi_cmd = ppkg_is_multi_cmd(cmd_type);
+    //bool is_multi_cmd = ppkg_is_multi_cmd(cmd_type);
     char *p, *q;
     int  total_len = strlen(cfm_str);
     int  ret_len = 0;
