@@ -985,6 +985,40 @@ static int ppkg_get_key_param_info(char *cmd_str,
 }
 
 /************************************************************************************
+* Function: ppkg_get_param_value
+* Author @ Date: John.Wang@20200428
+* Input:
+* Return: 
+* Description: length of para_value
+*************************************************************************************/
+static int ppkg_get_param_value(char *src_str, char *param, char *para_value)
+{
+    /* GEOID="5" */
+    char *p = strstr(src_str, param);
+    char *q = NULL;
+
+    if (NULL == p)
+    {
+        return 0;
+    }
+
+    p += (strlen(param) + 2); /* Skip '=' and left '"' */
+    q = p;
+    p = strchr(q, '"'); /* find right '"'*/
+    if (p != NULL)
+    {
+        *p = (char)0;
+        memcpy(para_value, q, p - q);
+    }
+    else
+    {
+        return 0;
+    }
+
+    return p - q;
+}
+
+/************************************************************************************
 * Function: ppkg_cmd_keyword_compare
 * Author @ Date: John.Wang@20200305
 * Input:
@@ -997,6 +1031,7 @@ static bool ppkg_cmd_keyword_compare(char *key, char* cmd_type, char *def_str,
     int id = -1;
     char def_value[MAX_TEMP_BUFF_LEN] = {0};
     char cust_value[MAX_TEMP_BUFF_LEN] = {0};
+    char id_str[8] = {0};
     int l1, l2;
     int def_len = 0;
     int cust_len = 0;
@@ -1005,20 +1040,11 @@ static bool ppkg_cmd_keyword_compare(char *key, char* cmd_type, char *def_str,
     while((l1 = ppkg_get_key_param_info((char*)(def_str + def_len), key, NULL, def_value)) > 0 && 
           (l2 = ppkg_get_key_param_info((char*)(cust_str + cust_len), key, &id, cust_value)) > 0)
     {
-        if (strcmp("PEO", cmd_type) == 0)
+        if (strcmp("PEO", cmd_type) == 0 &&
+            ppkg_get_param_value((cust_str + cust_len), "GEOID", id_str) != 0
+            )
         {
-            /* GEOID="5" */
-            char *p = strstr((cust_str + cust_len), "GEOID=");
-            char *q = NULL;
-
-            p += (strlen("GEOID=") + 1); /* Skip left " */
-            q = p;
-            p = strchr(q, '"');
-            if (p != NULL)
-            {
-                *p = (char)0;
-                id = atoi(q);
-            }
+            id = atoi(id_str);
         }
         def_len += l1;
         cust_len += l2;
@@ -1133,6 +1159,7 @@ static bool ppkg_cmd_compare(cmd_node_struct *def_node
     int id = -1;
     bool ret = TRUE;
     char *key_word = NULL;
+    char id_str[8] = {0};
     cmd_attribute_struct *cmd_attr_p = ppkg_get_cmd_attr(cust_node->cmd_type);
 
     if (NULL == cmd_attr_p || NULL == cmd_attr_p->key_paras)
@@ -1170,20 +1197,11 @@ static bool ppkg_cmd_compare(cmd_node_struct *def_node
                 cparse_len += clen;
                 dparse_len += dlen;
 
-                if (strcmp("PEO", cust_node->cmd_type) == 0)
+                if (strcmp("PEO", cust_node->cmd_type) == 0 &&
+                    ppkg_get_param_value(csub_str, "GEOID", id_str) != 0
+                    )
                 {
-                    /* GEOID="5" */
-                    char *p = strstr(csub_str, "GEOID=");
-                    char *q = NULL;
-
-                    p += (strlen("GEOID=") + 1); /* Skip left " */
-                    q = p;
-                    p = strchr(q, '"');
-                    if (p != NULL)
-                    {
-                        *p = (char)0;
-                        id = atoi(q);
-                    }
+                    id = atoi(id_str);
                 }
 
                 if (clen != dlen || 
