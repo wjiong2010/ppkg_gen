@@ -64,7 +64,7 @@ static void q_init(queue_type *queue_p)
 {
     if (NULL == queue_p)
     {
-        DBG_TRACE("return q_init NULL");
+        DBG_TRACE(DBG_LOG,"return q_init NULL");
         return;
     }
 
@@ -83,7 +83,7 @@ static void q_destroy(queue_type *queue_p)
 {
     if (NULL == queue_p)
     {
-        DBG_TRACE("return q_destroy NULL");
+        DBG_TRACE(DBG_LOG,"return q_destroy NULL");
         return;
     }
 
@@ -104,7 +104,7 @@ int q_put(queue_type *queue_p, link_type *node)
     
     if (NULL == queue_p || NULL == node)
     {
-        DBG_TRACE("return q_put NULL");
+        DBG_TRACE(DBG_LOG,"return q_put NULL");
         return -1;
     }
 
@@ -134,7 +134,7 @@ link_type *q_check(queue_type *queue_p)
     
     if (NULL == queue_p || 0 == queue_p->len)
     {
-        DBG_TRACE("return q_check NULL");
+        DBG_TRACE(DBG_LOG,"return q_check NULL");
         return NULL;
     }
     
@@ -160,7 +160,7 @@ link_type *q_get(queue_type *queue_p)
 {
     if (NULL == queue_p || 0 == queue_p->len)
     {
-        DBG_TRACE("return q_get NULL");
+        DBG_TRACE(DBG_LOG,"return q_get NULL");
         return NULL;
     }
 
@@ -178,7 +178,7 @@ link_type *q_next(queue_type *queue_p, link_type *link_p)
 {
     if (NULL == queue_p || NULL == link_p)
     {
-        DBG_TRACE("return q_next NULL");
+        DBG_TRACE(DBG_LOG,"return q_next NULL");
         return NULL;
     }
 
@@ -203,7 +203,7 @@ int q_delete(queue_type *queue_p, link_type *del_item)
 {   
     if (NULL == queue_p || 0 == queue_p->len || NULL == del_item)
     {
-        DBG_TRACE("return q_delete -1");
+        DBG_TRACE(DBG_LOG,"return q_delete -1");
         return -1;
     }
     del_item->pre->next = del_item->next;
@@ -224,7 +224,7 @@ int q_size(queue_type *queue_p)
 {
     if (NULL == queue_p)
     {
-        DBG_TRACE("return q_size NULL");
+        DBG_TRACE(DBG_LOG,"return q_size NULL");
         return 0;
     }
 
@@ -242,7 +242,7 @@ static void ppkg_init_circal_buff(circal_buffer *buff_p, char* mem_block)
 {
     if (NULL == buff_p)
     {
-        DBG_TRACE("return buff_p NULL");
+        DBG_TRACE(DBG_LOG,"return buff_p NULL");
         return;
     }
 
@@ -264,7 +264,7 @@ static void ppkg_reset_circal_buff(circal_buffer *buff_p)
 {
     if (NULL == buff_p)
     {
-        DBG_TRACE("return buff_p NULL");
+        DBG_TRACE(DBG_LOG,"return buff_p NULL");
         return;
     }
 
@@ -283,7 +283,7 @@ static int ppkg_circal_buff_get_valid_space(circal_buffer *cir_p)
 {
     if (cir_p == NULL)
     {
-        DBG_TRACE("return cir_p || buff_p NULL");
+        DBG_TRACE(DBG_LOG,"return cir_p || buff_p NULL");
         return 0;
     }
 
@@ -301,7 +301,7 @@ static int ppkg_circal_buff_get_valid_bytes(circal_buffer *cir_p)
 {
     if (cir_p == NULL)
     {
-        DBG_TRACE("return cir_p || buff_p NULL");
+        DBG_TRACE(DBG_LOG,"return cir_p || buff_p NULL");
         return 0;
     }
 
@@ -322,14 +322,14 @@ static int ppkg_write_circal_buff(circal_buffer *cir_p, char *buff_p, unsigned i
     
     if (NULL == buff_p || cir_p == NULL)
     {
-        DBG_TRACE("return cir_p || buff_p NULL");
+        DBG_TRACE(DBG_LOG,"return cir_p || buff_p NULL");
         return -1;
     }
     wr_p = &cir_p->data[cir_p->wr_pos];
 
     if (len > MAX_MEM_BLOCK_LEN || len + cir_p->valid_bytes > MAX_MEM_BLOCK_LEN)
     {
-        DBG_TRACE("return not enough space for writing.");
+        DBG_TRACE(DBG_LOG,"return not enough space for writing.");
         return -2;
     }
 
@@ -347,7 +347,7 @@ static int ppkg_write_circal_buff(circal_buffer *cir_p, char *buff_p, unsigned i
     }
 
     cir_p->valid_bytes += len;
-    DBG_TRACE("valid_bytes:%d, len:%d, [wr:%d, rd:%d]"
+    DBG_TRACE(DBG_LOG,"valid_bytes:%d, len:%d, [wr:%d, rd:%d]"
         , cir_p->valid_bytes, len
         , cir_p->wr_pos, cir_p->rd_pos);
 
@@ -368,14 +368,14 @@ static int ppkg_read_circal_buff(circal_buffer *cir_p, char *buff_p, unsigned in
     
     if (NULL == buff_p || cir_p == NULL)
     {
-        DBG_TRACE("return cir_p || buff_p NULL");
+        DBG_TRACE(DBG_LOG,"return cir_p || buff_p NULL");
         return -1;
     }
     rd_p = &cir_p->data[cir_p->rd_pos];
 
     if (cir_p->valid_bytes == 0)
     {
-        DBG_TRACE("return no data for reading");
+        DBG_TRACE(DBG_LOG,"return no data for reading");
         return -2;
     }
 
@@ -406,7 +406,7 @@ static int ppkg_read_circal_buff(circal_buffer *cir_p, char *buff_p, unsigned in
             read_len = first_len;
         }
     }
-    DBG_TRACE("valid_bytes:%d, read_len:%d, [wr:%d, rd:%d]"
+    DBG_TRACE(DBG_LOG,"valid_bytes:%d, read_len:%d, [wr:%d, rd:%d]"
         , cir_p->valid_bytes, read_len
         , cir_p->wr_pos, cir_p->rd_pos);
 
@@ -429,18 +429,18 @@ static int ppkg_read_circal_buff_line(circal_buffer *cir_p, char *buff_p, unsign
 
     if (NULL == buff_p || cir_p == NULL)
     {
-        DBG_TRACE("return cir_p || buff_p NULL");
+        DBG_TRACE(DBG_LOG,"return cir_p || buff_p NULL");
         return -1;
     }
 
     if (cir_p->valid_bytes == 0)
     {
-        DBG_TRACE("return no data for reading");
+        DBG_TRACE(DBG_LOG,"return no data for reading");
         return -2;
     }
     bytes_to_search = cir_p->valid_bytes;
     i = cir_p->rd_pos;
-    DBG_TRACE("rd_pos:%d, bytes_to_search:%d", i, bytes_to_search);
+    DBG_TRACE(DBG_LOG,"rd_pos:%d, bytes_to_search:%d", i, bytes_to_search);
     
     while(bytes_to_search-- > 0)
     {
@@ -459,7 +459,7 @@ static int ppkg_read_circal_buff_line(circal_buffer *cir_p, char *buff_p, unsign
         bytes_to_search--;
     }
 
-    DBG_TRACE("complete_line:%d, vbytes:%d, bytes_to_search:%d"
+    DBG_TRACE(DBG_LOG,"complete_line:%d, vbytes:%d, bytes_to_search:%d"
         , complete_line, cir_p->valid_bytes, bytes_to_search);
     
     if (!complete_line)
@@ -468,7 +468,7 @@ static int ppkg_read_circal_buff_line(circal_buffer *cir_p, char *buff_p, unsign
     }
     else if (cir_p->valid_bytes - bytes_to_search > size)
     {
-        DBG_TRACE("return not enough space for a line");
+        DBG_TRACE(DBG_LOG,"return not enough space for a line");
         return -4;
     }
 
@@ -487,7 +487,7 @@ static bool ppkg_get_cfg_info(cfg_info_struct *cfg_info_p)
 {
     if (NULL == cfg_info_p)
     {
-        DBG_TRACE("return cfg_info_p NULL");
+        DBG_TRACE(DBG_LOG,"return cfg_info_p NULL");
         return FALSE;
     }
 
@@ -500,7 +500,7 @@ static bool ppkg_get_cfg_info(cfg_info_struct *cfg_info_p)
     strcpy(cfg_info_p->path_cust_ini, "D:\\forfun\\paramPackage_test\\C_GV300_A04V07_M0_0_at.ini");
     strcpy(cfg_info_p->password, "gv300");
 
-    DBG_TRACE("cfg_info_p->fm_version:%s", cfg_info_p->fm_version);
+    DBG_TRACE(DBG_LOG,"cfg_info_p->fm_version:%s", cfg_info_p->fm_version);
     
     return TRUE;
 }
@@ -530,13 +530,13 @@ static int ppkg_read_file(FILE *fp, circal_buffer *cir_buf)
 
         if (read_len == 0)
         {
-            DBG_TRACE("circal buffer is full");
+            DBG_TRACE(DBG_LOG,"circal buffer is full");
             ret = -3;
             break;
         }
 
         read_len = fread(temp_buff, 1, read_len, fp);
-        DBG_TRACE("read_len:%d", read_len);
+        DBG_TRACE(DBG_LOG,"read_len:%d", read_len);
         if (MAX_TEMP_BLOCK_LEN == read_len)
         {
             ppkg_write_circal_buff(cir_buf, temp_buff, MAX_TEMP_BLOCK_LEN);
@@ -546,7 +546,7 @@ static int ppkg_read_file(FILE *fp, circal_buffer *cir_buf)
         {
             ppkg_write_circal_buff(cir_buf, temp_buff, read_len);
             ret = -3;
-            DBG_TRACE("File read complete");
+            DBG_TRACE(DBG_LOG,"File read complete");
             break;
         }
     }
@@ -614,7 +614,7 @@ static line_type_enum ppkg_get_buff_line_type(const char *cmd_str, int cmd_len)
     {
     }
 
-    DBG_TRACE("line_type:%d", line_type);
+    DBG_TRACE(DBG_LOG,"line_type:%d", line_type);
     
     return line_type;
 }
@@ -665,7 +665,7 @@ static cmd_attribute_struct *ppkg_get_cmd_attr(const char* cmd_type)
         }
         i++;
     }
-    DBG_TRACE("i:%d, cmd_type:%s, ret_p:%p", i, cmd_type, ret_p);
+    DBG_TRACE(DBG_LOG,"i:%d, cmd_type:%s, ret_p:%p", i, cmd_type, ret_p);
 
     return ret_p;
 }
@@ -729,7 +729,7 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, queue_type *queue_p)
 
     if (NULL == cir_buf || NULL == queue_p)
     {
-        DBG_TRACE("return path, queue_p NULL");
+        DBG_TRACE(DBG_LOG,"return path, queue_p NULL");
         return -1;
     }
     
@@ -740,7 +740,7 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, queue_type *queue_p)
     {
         if ((node_p = (cmd_node_struct *)malloc(sizeof(cmd_node_struct) + ret)) == NULL)
         {
-            DBG_TRACE("malloc failed");
+            DBG_TRACE(DBG_LOG,"malloc failed");
             return -1;
         }
         memset(node_p, 0, (sizeof(cmd_node_struct) + ret));
@@ -758,7 +758,7 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, queue_type *queue_p)
         {
             node_p->id = ppkg_get_multi_cmd_id(node_p->cmd_str, node_p->cmd_len, id_pos);
         }
-        DBG_TRACE("->cmd_type:%s, %d, %s", node_p->cmd_type, node_p->cmd_len, node_p->cmd_str);
+        DBG_TRACE(DBG_LOG,"->cmd_type:%s, %d, %s", node_p->cmd_type, node_p->cmd_len, node_p->cmd_str);
         q_put(queue_p, (link_type *)node_p);
     }
     else if (VER_LINE == line_type)
@@ -767,7 +767,7 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, queue_type *queue_p)
     }
     else
     {
-        DBG_TRACE("unknow line type");
+        DBG_TRACE(DBG_LOG,"unknow line type");
     }
 
     return ret;
@@ -788,7 +788,7 @@ static int ppkg_build_cmd_list(char* path, queue_type *queue_p)
     
     if (NULL == path || NULL == queue_p)
     {
-        DBG_TRACE("return path, queue_p NULL");
+        DBG_TRACE(DBG_LOG,"return path, queue_p NULL");
         return -1;
     }
 
@@ -798,7 +798,7 @@ static int ppkg_build_cmd_list(char* path, queue_type *queue_p)
 	}
 	else
 	{
-		DBG_TRACE("path=%s, read_fp=%x \n", path, read_fp);
+		DBG_TRACE(DBG_LOG,"path=%s, read_fp=%x \n", path, read_fp);
 	}
 
     fseek(read_fp, 0, SEEK_SET);
@@ -812,7 +812,7 @@ static int ppkg_build_cmd_list(char* path, queue_type *queue_p)
     while (ppkg_circal_buff_get_valid_bytes(&ppkg_cntx_p->cir_buff));
     
     ret = q_size(queue_p);
-    DBG_TRACE("data convertion complete, rest bytes:%d, queue_p->len:%d"
+    DBG_TRACE(DBG_LOG,"data convertion complete, rest bytes:%d, queue_p->len:%d"
                     , ppkg_circal_buff_get_valid_bytes(&ppkg_cntx_p->cir_buff), ret);
     ppkg_reset_circal_buff(&ppkg_cntx_p->cir_buff);
 
@@ -842,7 +842,7 @@ static bool ppkg_is_ignore_cmd(const char* cmd_type)
             break;
         }
     }
-    //DBG_TRACE("ret:%d, [%s,%s]", ret, multi_cmd_type[i], cmd_type);    
+    //DBG_TRACE(DBG_LOG,"ret:%d, [%s,%s]", ret, multi_cmd_type[i], cmd_type);    
 
     return ret;
 }
@@ -867,7 +867,7 @@ static bool ppkg_is_multi_cmd(const char* cmd_type)
             break;
         }
     }
-    //DBG_TRACE("ret:%d, [%s,%s]", ret, multi_cmd_type[i], cmd_type);    
+    //DBG_TRACE(DBG_LOG,"ret:%d, [%s,%s]", ret, multi_cmd_type[i], cmd_type);    
 
     return ret;
 }
@@ -919,7 +919,7 @@ static void ppkg_insert_command_id(int id, cmd_diff_data *diff_data)
         {
             diff_data->diff_id_list[diff_data->diff_id_num] = id;
             diff_data->diff_id_num++;
-            DBG_TRACE("insert_command_id:%d", id);
+            DBG_TRACE(DBG_LOG,"insert_command_id:%d", id);
             break;
         }
         if (id == diff_data->diff_id_list[i]) break;
@@ -1048,7 +1048,7 @@ static bool ppkg_cmd_keyword_compare(char *key, char* cmd_type, char *def_str,
         }
         def_len += l1;
         cust_len += l2;
-        DBG_TRACE("def_len:%d, cust_len:%d, def_value:%s, cust_value:%s, id:%d"
+        DBG_TRACE(DBG_LOG,"def_len:%d, cust_len:%d, def_value:%s, cust_value:%s, id:%d"
             , def_len, cust_len, def_value, cust_value, id);
         if (strcmp(def_value, cust_value))
         {
@@ -1179,7 +1179,7 @@ static bool ppkg_cmd_compare(cmd_node_struct *def_node
         }
         else
         {
-            DBG_TRACE("is_multi_cmd:%d, first_param:%p, cust_str_len:%d, def_str_len:%d"
+            DBG_TRACE(DBG_LOG,"is_multi_cmd:%d, first_param:%p, cust_str_len:%d, def_str_len:%d"
                 , cust_node->is_multi_cmd, cmd_attr_p->first_param
                 , strlen(cust_node->cmd_str), strlen(def_node->cmd_str)
                 );
@@ -1228,7 +1228,7 @@ static bool ppkg_cmd_compare(cmd_node_struct *def_node
             memset(key_word, 0, strlen(cmd_attr_p->key_paras));
             key_word_len = ppkg_get_key_word(key_word, (const char *)(cmd_attr_p->key_paras + parsed_len));
             *(key_word + key_word_len) = (char)0;
-            DBG_TRACE("key_word_len:%d, parsed_len:%d, key_word:%s", key_word_len, parsed_len, key_word);
+            DBG_TRACE(DBG_LOG,"key_word_len:%d, parsed_len:%d, key_word:%s", key_word_len, parsed_len, key_word);
             
             if (key_word_len)
             {
@@ -1251,7 +1251,7 @@ static bool ppkg_cmd_compare(cmd_node_struct *def_node
 
         free(key_word);
     }
-    //DBG_TRACE("ret:%d, [%s,%s]", ret, multi_cmd_type[i], cmd_type);    
+    //DBG_TRACE(DBG_LOG,"ret:%d, [%s,%s]", ret, multi_cmd_type[i], cmd_type);    
 
     return ret;
 }
@@ -1282,33 +1282,33 @@ static int ppkg_cmp_list_cb_diff(queue_type *def_q
     {
         if (ppkg_is_ignore_cmd(cust_node->cmd_type))
         {
-            DBG_TRACE("ignore command");
+            DBG_TRACE(DBG_LOG,"ignore command");
             break;
         }
-        //DBG_TRACE("ppkg_cmp_list_cb_diff[%s, %s]", cust_node->cmd_type, def_node->cmd_type);
+        //DBG_TRACE(DBG_LOG,"ppkg_cmp_list_cb_diff[%s, %s]", cust_node->cmd_type, def_node->cmd_type);
         if (0 == strcmp(cust_node->cmd_type, def_node->cmd_type))
         {
             if (!ppkg_cmd_compare(def_node, cust_node, &diff_data))
             {
                 if ((diff_node = (diff_cmd_node *)malloc(sizeof(diff_cmd_node))) == NULL)
                 {
-                    DBG_TRACE("malloc failed");
+                    DBG_TRACE(DBG_LOG,"malloc failed");
                     break;
                 }
                 memset(diff_node, 0, (sizeof(diff_cmd_node)));
                 strcpy(diff_node->cmd_type, cust_node->cmd_type);
-                DBG_TRACE("is_multi_cmd:%d, diff_id_list:%p"
+                DBG_TRACE(DBG_LOG,"is_multi_cmd:%d, diff_id_list:%p"
                         , cust_node->is_multi_cmd, diff_data.diff_id_list);
                 if (cust_node->is_multi_cmd && diff_data.diff_id_list)
                 {
                     if (NULL == (diff_node->diff_data.diff_id_list 
                                     = (int *)malloc(sizeof(int) * diff_data.diff_id_num)))
                     {
-                        DBG_TRACE("malloc failed2");
+                        DBG_TRACE(DBG_LOG,"malloc failed2");
                         break;
                     }
 
-                    DBG_TRACE("diff_data.diff_id_num:%d", diff_data.diff_id_num);
+                    DBG_TRACE(DBG_LOG,"diff_data.diff_id_num:%d", diff_data.diff_id_num);
                     diff_node->diff_data.diff_id_num = diff_data.diff_id_num;
                     memset(diff_node->diff_data.diff_id_list
                             , 0, (sizeof(int) * diff_data.diff_id_num));
@@ -1317,7 +1317,7 @@ static int ppkg_cmp_list_cb_diff(queue_type *def_q
                             , (sizeof(int) * diff_data.diff_id_num));
                 }
                 
-                DBG_TRACE("->diff_node:%s", diff_node->cmd_type);
+                DBG_TRACE(DBG_LOG,"->diff_node:%s", diff_node->cmd_type);
                 q_put(differ_cfg_queue, (link_type*)diff_node);
             }
             
@@ -1329,7 +1329,7 @@ static int ppkg_cmp_list_cb_diff(queue_type *def_q
         }
         else
         {
-            //DBG_TRACE("ppkg_cmp_list_cb_diff[%p, %p]", def_node, def_node->qlink.next);
+            //DBG_TRACE(DBG_LOG,"ppkg_cmp_list_cb_diff[%p, %p]", def_node, def_node->qlink.next);
             def_node = (cmd_node_struct *)q_next(def_q, (link_type *)def_node);
         }
     }
@@ -1379,7 +1379,7 @@ static int ppkg_compare_cmd_list(
     
     if (NULL == cmp_q || NULL == opr_q)
     {
-        DBG_TRACE("return cust_q || def_q");
+        DBG_TRACE(DBG_LOG,"return cust_q || def_q");
         return 0;
     }
     
@@ -1389,14 +1389,14 @@ static int ppkg_compare_cmd_list(
         opr_node = q_check(opr_q);
         if (NULL == opr_node || NULL == cmp_node)
         {
-            DBG_TRACE("opr_node:%p, cmp_node:%p", opr_node, cmp_node);
+            DBG_TRACE(DBG_LOG,"opr_node:%p, cmp_node:%p", opr_node, cmp_node);
             break;
         }
 
-        //DBG_TRACE("def_node:%p, cust_node:%p", opr_node, cmp_node);
+        //DBG_TRACE(DBG_LOG,"def_node:%p, cust_node:%p", opr_node, cmp_node);
         ret = cb(cmp_q, cmp_node, opr_node);
         
-        DBG_TRACE("opr_q_len:%d, cmp_q_len:%d, ret=%d", q_size(opr_q),  q_size(cmp_q), ret);
+        DBG_TRACE(DBG_LOG,"opr_q_len:%d, cmp_q_len:%d, ret=%d", q_size(opr_q),  q_size(cmp_q), ret);
 
         free(opr_node);
     }
@@ -1405,7 +1405,7 @@ static int ppkg_compare_cmd_list(
     q_destroy(opr_q);
     ppkg_release_queue(cmp_q);
 
-    DBG_TRACE("ppkg_compare_cmd_list ret:%d", ret);
+    DBG_TRACE(DBG_LOG,"ppkg_compare_cmd_list ret:%d", ret);
     
     return ret;
 }
@@ -1441,10 +1441,10 @@ static int ppkg_assemble_single_command(cmd_node_struct *ini_node)
     
     if ((p = (char *)malloc(mlc_size)) == NULL)
     {
-        DBG_TRACE("malloc failed");
+        DBG_TRACE(DBG_LOG,"malloc failed");
         return 0;
     }
-    DBG_TRACE("ppkg_assemble_single_command p:%p, mlc_size=%d, cmd_type:%s"
+    DBG_TRACE(DBG_LOG,"ppkg_assemble_single_command p:%p, mlc_size=%d, cmd_type:%s"
         , p, mlc_size, ini_node->cmd_type);
     memset(p, 0, mlc_size);
     
@@ -1454,7 +1454,7 @@ static int ppkg_assemble_single_command(cmd_node_struct *ini_node)
                 "MetaResult[%d]=OK\r\n\r\n",
                 ppkg_cntx_p->cmd_cnt);
     ppkg_cntx_p->cmd_cnt++;
-    DBG_TRACE("->atfile line:%s, len=%d", p, len);
+    DBG_TRACE(DBG_LOG,"->atfile line:%s, len=%d", p, len);
     if (ppkg_circal_buff_get_valid_space(cir_buff_ptr) < len)
     {
         /* not enough space for buffer */
@@ -1489,7 +1489,7 @@ static int ppkg_cmp_list_cb_atfile(queue_type *ini_q
 
     if (NULL == diff_node || NULL == ini_node)
     {
-        DBG_TRACE("diff_node || ini_node");
+        DBG_TRACE(DBG_LOG,"diff_node || ini_node");
         return 0;
     }
     
@@ -1508,13 +1508,13 @@ static int ppkg_cmp_list_cb_atfile(queue_type *ini_q
             else
             {
                 first_cmd_type = ini_node->cmd_type;
-                DBG_TRACE("first_cmd_type:%s", first_cmd_type);
+                DBG_TRACE(DBG_LOG,"first_cmd_type:%s", first_cmd_type);
                 data_ptr = &(diff_node->diff_data);
                 do
                 {
                     next_ini_ptr = q_next(ini_q , (link_type *)ini_node);
 
-                    DBG_TRACE("diff_id_list:%p, next_ini_ptr:%p, ini_node->id:%d, i:%d, diff_id_num:%d, cmd_type:%s"
+                    DBG_TRACE(DBG_LOG,"diff_id_list:%p, next_ini_ptr:%p, ini_node->id:%d, i:%d, diff_id_num:%d, cmd_type:%s"
                         , data_ptr->diff_id_list, next_ini_ptr, ini_node->id, i, data_ptr->diff_id_num
                         , ini_node->cmd_type);
 
@@ -1616,7 +1616,7 @@ static void ppkg_create_file(char *path, ppkg_gen_context *cntx_p)
 	}
 	else
 	{
-		DBG_TRACE("path=%s, read_fp=%x \n", path, cntx_p->temp_fp);
+		DBG_TRACE(DBG_LOG,"path=%s, read_fp=%x \n", path, cntx_p->temp_fp);
 	}
     
     fseek(cntx_p->temp_fp, 0, SEEK_SET);
@@ -1639,7 +1639,7 @@ static bool ppkg_com_create(ppkg_gen_context *cntx_p)
     cntx_p->com_hdlr = create_com("com4", 115200, 8);
     if (INVALID_HANDLE_VALUE == cntx_p->com_hdlr)
     {
-        DBG_TRACE("open com failed!");
+        DBG_TRACE(DBG_LOG,"open com failed!");
         return FALSE;
     }   
 
@@ -1720,7 +1720,7 @@ static int ppkg_com_read(ppkg_gen_context *cntx_p, char *rd_buf, int rd_size)
         real_len = rd_len;
     }
 #endif
-    DBG_TRACE("real_len:%d, %s", real_len, rd_buf);
+    DBG_TRACE(DBG_LOG,"real_len:%d, %s", real_len, rd_buf);
 
     return real_len;
 }
@@ -1838,7 +1838,7 @@ static int ppkg_assem_confirm_info(char *buf_ptr, int buf_size,
     int  sub_count = 0;
     int  line_len = 0;
 
-    DBG_TRACE("total_len=%d, buf_size:%d", total_len, buf_size);
+    DBG_TRACE(DBG_LOG,"total_len=%d, buf_size:%d", total_len, buf_size);
 
     p = q = cfm_str;
 
@@ -1858,7 +1858,7 @@ static int ppkg_assem_confirm_info(char *buf_ptr, int buf_size,
         line_len = p - q;
         if (line_len < 7)
         {
-            DBG_TRACE("All confirm info packaged");
+            DBG_TRACE(DBG_LOG,"All confirm info packaged");
             break;
         }
 
@@ -1877,7 +1877,7 @@ static int ppkg_assem_confirm_info(char *buf_ptr, int buf_size,
                         temp_buff, 
                         p - q
                         );
-        DBG_TRACE("ret_len=%d, buf_size:%d", ret_len, buf_size - ret_len);
+        DBG_TRACE(DBG_LOG,"ret_len=%d, buf_size:%d", ret_len, buf_size - ret_len);
         ret_len += snprintf((char*)(buf_ptr + ret_len), buf_size - ret_len, "\r\n");
 
         q = p;
@@ -1934,16 +1934,16 @@ static bool ppkg_build_confirm_file(ppkg_gen_context *cntx_p, cfg_info_struct *c
             read_len = ppkg_com_read(cntx_p, read_buff, MAX_TEMP_BLOCK_LEN);
             if (0 == read_len)
             {
-                DBG_TRACE("read failed");
+                DBG_TRACE(DBG_LOG,"read failed");
                 break;
             }
 
             if ((mlc_ptr = (char *)malloc(read_len)) == NULL)
             {
-                DBG_TRACE("malloc failed");
+                DBG_TRACE(DBG_LOG,"malloc failed");
                 break;
             }
-            DBG_TRACE("mlc_ptr:%p, mlc_size=%d", mlc_ptr, read_len);
+            DBG_TRACE(DBG_LOG,"mlc_ptr:%p, mlc_size=%d", mlc_ptr, read_len);
             memset(mlc_ptr, 0, read_len);
 
             length = snprintf(mlc_ptr, read_len, "AtCmd[%d]=%s\r\n", ppkg_cntx_p->cmd_cnt, query_cmd);
@@ -2013,7 +2013,7 @@ gen_result_enum ppkg_gen(void)
      */
     if (!ppkg_get_cfg_info(&cfg_info))
     {
-        DBG_TRACE("return ppkg_get_cfg_info");
+        DBG_TRACE(DBG_LOG,"return ppkg_get_cfg_info");
         ret_val = GEN_CONFIG_FAIL;
     }
     if (ret_val != GEN_SUCCESS) return ret_val;
@@ -2021,7 +2021,7 @@ gen_result_enum ppkg_gen(void)
     /* check com communication, device information */
     if (!ppkg_device_info_check(ppkg_cntx_p, &cfg_info))
     {
-        DBG_TRACE("return ppkg_device_info_check");
+        DBG_TRACE(DBG_LOG,"return ppkg_device_info_check");
         ret_val = GEN_PRE_CHECK;
     }
     if (ret_val != GEN_SUCCESS)
@@ -2035,7 +2035,7 @@ gen_result_enum ppkg_gen(void)
         ppkg_build_cmd_list(cfg_info.path_cust_cfg, &ppkg_cntx_p->custom_cfg) &&
         ppkg_build_cmd_list(cfg_info.path_cust_ini, &ppkg_cntx_p->custom_ini) >= 0)
     {
-        DBG_TRACE("def_cfg->len:%d cust_cfg->len:%d, cust_ini->len:%d",
+        DBG_TRACE(DBG_LOG,"def_cfg->len:%d cust_cfg->len:%d, cust_ini->len:%d",
                 q_size(&ppkg_cntx_p->default_cfg), 
                 q_size(&ppkg_cntx_p->custom_cfg), 
                 q_size(&ppkg_cntx_p->custom_ini));
@@ -2056,14 +2056,14 @@ gen_result_enum ppkg_gen(void)
     if (ppkg_compare_cmd_list(&ppkg_cntx_p->default_cfg, &ppkg_cntx_p->custom_cfg, ppkg_cmp_list_cb_diff) &&
         ppkg_compare_cmd_list(&ppkg_cntx_p->custom_ini, &ppkg_cntx_p->differ_cfg, ppkg_cmp_list_cb_atfile))
     {
-        DBG_TRACE("build AT file");
+        DBG_TRACE(DBG_LOG,"build AT file");
         ppkg_assemble_file_tail();
         ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, &ppkg_cntx_p->cir_buff);
         ppkg_reset_circal_buff(&ppkg_cntx_p->cir_buff);
     }
     else
     {
-        DBG_TRACE("failed to build AT file");
+        DBG_TRACE(DBG_LOG,"failed to build AT file");
         ret_val = GEN_ATFILE;
     }
     ppkg_close_file(ppkg_cntx_p->temp_fp);
@@ -2078,13 +2078,13 @@ gen_result_enum ppkg_gen(void)
     ppkg_assemble_file_head();
     if (ppkg_build_confirm_file(ppkg_cntx_p, &cfg_info))
     {
-        DBG_TRACE("build CFM file");
+        DBG_TRACE(DBG_LOG,"build CFM file");
         ppkg_assemble_file_tail();
         ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, &ppkg_cntx_p->cir_buff);
     }
     else
     {
-        DBG_TRACE("failed to build CFM file");
+        DBG_TRACE(DBG_LOG,"failed to build CFM file");
         ret_val = GEN_CONFIRM;
     }
     ppkg_close_file(ppkg_cntx_p->temp_fp);

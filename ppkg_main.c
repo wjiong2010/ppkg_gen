@@ -27,9 +27,10 @@
 * Return:
 * Description: main function of the generator of a param package auto set
 *************************************************************************************/
-int main(void)
+int main(int argc, char* argv[])
 {
+    debug_set_print_info_mask(DBG_LOG);
     ppkg_gen();
-    
+
     return 0;
 }
