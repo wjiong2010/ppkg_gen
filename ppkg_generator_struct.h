@@ -41,7 +41,7 @@
 
 #define MAX_MEM_BLOCK_LEN	52100	/* 50K bytes block */
 #define MAX_TEMP_BLOCK_LEN  10240   /* 10K bytes block */
-#define MAX_ID_LIST_LEN     1024    
+#define MAX_ID_LIST_LEN     1024
 
 /* A command frame sample:
  * <Command Type="GTASC" BrakeSpeedThreshold="60" DeltaSpeedThreshold="8" DeltaHeadingThreshold="5"/>
@@ -132,11 +132,11 @@ typedef struct {
     char        cmd_str[1];
 } cmd_node_struct;
 
-typedef struct {   
+typedef struct {
     char    *cmd_name;
     bool    ignored;
     char    *first_param;
-    int     id_pos;             /* for multi-command, means how many ',' before <id>. 
+    int     id_pos;             /* for multi-command, means how many ',' before <id>.
                                  * for single-command, always be 0
                                  */
     char    *key_paras;
@@ -158,6 +158,9 @@ typedef struct {
     queue_type  custom_ini;
     queue_type  differ_cfg;
     queue_type  at_queue;
+    cmd_node_struct *temp_node_p;
+    cmd_node_struct *first_cfg_p;
+    bool        pwd_changed;
     HCOM        com_hdlr;
     circal_buffer cir_buff;
 } ppkg_gen_context;
