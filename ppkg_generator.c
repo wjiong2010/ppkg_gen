@@ -752,8 +752,8 @@ static bool ppkg_password_changed(char *cmd_str, int cmd_len)
 {
     ppkg_gen_context *cntx_p = ppkg_cntx_p;
     bool ret_val = FALSE;
-    char pwd_str[64] = {0};
-    char new_pwd_str[64] = {0};
+    char pwd_str[MAX_LEN_PWD] = {0};
+    char new_pwd_str[MAX_LEN_PWD] = {0};
     char *p, *q;
 
     /*AT+GTCFG=gv300,gv300,C_GV300_A04V07_M0_0,1,,,,7F,1,,10EF,1,0,0,300,0,1,1,1,0,0,1,0,FFFF$*/
@@ -762,14 +762,17 @@ static bool ppkg_password_changed(char *cmd_str, int cmd_len)
     if (q != NULL && q - cmd_str < cmd_len)
     {
         p = q + 1;
-        q = strchr(p, ',');
+        q = strchr(p, COMMA_SEPARATOR);
         if (q == NULL) return ret_val;
         memcpy(pwd_str, p, q - p);
 
         p = q + 1;
-        q = strchr(p, ',');
+        if (*p == COMMA_SEPARATOR) return ret_val;
+
+        q = strchr(p, COMMA_SEPARATOR);
         if (q == NULL) return ret_val;
         memcpy(new_pwd_str, p, q - p);
+        memcpy(cntx_p->new_password, new_pwd_str, q - p);
 
         ret_val = (bool)strcmp(pwd_str, new_pwd_str);
     }
@@ -777,6 +780,62 @@ static bool ppkg_password_changed(char *cmd_str, int cmd_len)
     DBG_TRACE(DBG_LOG,"return ret_val:%d, [%s,%s]"
             , ret_val, pwd_str, new_pwd_str);
     return ret_val;
+}
+
+/************************************************************************************
+* Function: ppkg_copy_first_cfg_cmd
+* Author @ Date: John.Wang@20200429
+* Input:
+* Return: length of first CFG command
+* Description: swap the position of password and new password
+*************************************************************************************/
+static int ppkg_copy_first_cfg_cmd(char *dest_str, char* cmd_str, int cmd_len)
+{
+    int wpos = 0;   /* write position */
+    char *p;
+    char *ppwd, *pnewpwd;
+    int pwdLen = 0;
+    int newpwdLen = 0;
+
+    /*AT+GTCFG=gv300,gv300,C_GV300_A04V07_M0_1,1,0,,,7F,1,,102C,1,0,0,300,0,1,1,1,0,0,1,0,FFFF$*/
+    p = cmd_str;
+
+    ppwd = strchr(p, '=');
+    if (NULL == ppwd && ppwd - cmd_str >= cmd_len)
+    {
+        return 0;
+    }
+    ppwd++; /* Skip = */
+    memcpy(dest_str, cmd_str, ppwd - cmd_str);
+    wpos += (ppwd - cmd_str);
+
+    p = strchr(ppwd, ',');
+    if (NULL == p || p - cmd_str >= cmd_len)
+    {
+        return 0;
+    }
+    pwdLen = p - ppwd;
+
+    p++;
+    pnewpwd = p;
+    p = strchr(pnewpwd, ',');
+    if (NULL == p || p - cmd_str >= cmd_len)
+    {
+        return 0;
+    }
+    newpwdLen = p - pnewpwd;
+
+    memcpy((void*)(dest_str + wpos), (void*)pnewpwd, newpwdLen);
+    wpos += newpwdLen;
+
+    memcpy((void*)(dest_str + wpos), (void*)ppwd, pwdLen);
+    wpos += newpwdLen;
+
+    memcpy((void*)(dest_str + wpos), (void*)p, cmd_len - wpos);
+
+    DBG_TRACE(DBG_LOG,"pwdLen:%d, newpwdLen:%d, first_cfg_cmd:%s", pwdLen, newpwdLen, dest_str);
+
+    return 0;
 }
 
 /************************************************************************************
@@ -843,7 +902,7 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, queue_type *queue_p)
                     return -1;
                 }
                 memset(first_cfg, 0, (sizeof(cmd_node_struct) + src_node_p->cmd_len));
-                first_cfg->cmd_type = src_node_p->cmd_type;
+                strcpy(first_cfg->cmd_type, src_node_p->cmd_type);
                 first_cfg->id = src_node_p->id;
                 first_cfg->is_multi_cmd = src_node_p->is_multi_cmd;
                 first_cfg->cmd_len = ppkg_copy_first_cfg_cmd(first_cfg->cmd_str, src_node_p->cmd_str, src_node_p->cmd_len);
@@ -872,63 +931,6 @@ static int ppkg_covert_to_list(circal_buffer *cir_buf, queue_type *queue_p)
 
     return ret;
 }
-
-/************************************************************************************
-* Function: ppkg_copy_first_cfg_cmd
-* Author @ Date: John.Wang@20200429
-* Input:
-* Return: length of first CFG command
-* Description: swap the position of password and new password
-*************************************************************************************/
-static int ppkg_copy_first_cfg_cmd(char *dest_str, char* cmd_str, int cmd_len)
-{
-    int wpos = 0;   /* write position */
-    char *p;
-    char *ppwd, *pnewpwd;
-    int pwdLen = 0;
-    int newpwdLen = 0;
-
-    /*AT+GTCFG=gv300,gv300,C_GV300_A04V07_M0_1,1,0,,,7F,1,,102C,1,0,0,300,0,1,1,1,0,0,1,0,FFFF$*/
-    p = cmd_str;
-
-    ppwd = strchr(p, '=');
-    if (NULL == ppwd && ppwd - cmd_str >= cmd_len)
-    {
-        return 0;
-    }
-    ppwd++; /* Skip = */
-    memcpy(dest_str, cmd_str, ppwd - cmd_str);
-    wpos += (ppwd - cmd_str);
-
-    p = strchr(ppwd, ',');
-    if (NULL == p || p - cmd_str >= cmd_len)
-    {
-        return 0;
-    }
-    pwdLen = p - ppwd;
-
-    p++;
-    pnewpwd = p;
-    p = strchr(pnewpwd, ',');
-    if (NULL == p || p - cmd_str >= cmd_len)
-    {
-        return 0;
-    }
-    newpwdLen = p - pnewpwd;
-
-    memcpy((void*)(dest_str + wpos), (void*)pnewpwd, newpwdLen);
-    wpos += newpwdLen;
-
-    memcpy((void*)(dest_str + wpos), (void*)ppwd, pwdLen);
-    wpos += newpwdLen;
-
-    memcpy((void*)(dest_str + wpos), (void*)p, cmd_len - wpos);
-
-    DBG_TRACE(DBG_LOG,"pwdLen:%d, newpwdLen:%d, first_cfg_cmd:%s", pwdLen, newpwdLen, dest_str);
-
-    return 0;
-}
-
 
 /************************************************************************************
 * Function: ppkg_build_cmd_list
@@ -1438,6 +1440,12 @@ static int ppkg_cmp_list_cb_diff(queue_type *def_q
 
     do
     {
+        if (ppkg_cntx_p->pwd_changed && 0 == strcmp(cust_node->cmd_type, "CFG"))
+        {
+            DBG_TRACE(DBG_LOG,"ignore CFG when password changed");
+            break;
+        }
+
         if (ppkg_is_ignore_cmd(cust_node->cmd_type))
         {
             DBG_TRACE(DBG_LOG,"ignore command");
@@ -1645,12 +1653,13 @@ static int ppkg_cmp_list_cb_atfile(queue_type *ini_q
 {
     cmd_node_struct *ini_node = (cmd_node_struct *)ini_ptr;
     diff_cmd_node   *diff_node = (diff_cmd_node *)diff_ptr;
+    ppkg_gen_context *cntx_p = ppkg_cntx_p;
     cmd_diff_data   *data_ptr = NULL;
     link_type       *next_ini_ptr = NULL;
     char *first_cmd_type = NULL;
     queue_type      *at_queue_ptr = NULL;
     int i = 0;
-    at_queue_ptr = &ppkg_cntx_p->at_queue;
+    at_queue_ptr = &cntx_p->at_queue;
 
     if (NULL == diff_node || NULL == ini_node)
     {
@@ -1658,10 +1667,17 @@ static int ppkg_cmp_list_cb_atfile(queue_type *ini_q
         return 0;
     }
 
-    if (ppkg_cntx_p->pwd_changed)
+    DBG_TRACE(DBG_LOG,"pwd_changed:%d, first_cfg_p:%p"
+            , cntx_p->pwd_changed, cntx_p->first_cfg_p);
+
+    if (cntx_p->pwd_changed && cntx_p->first_cfg_p != NULL)
     {
-        ppkg_assemble_single_command(ppkg_cntx_p->first_cfg_p);
-        q_put(at_queue_ptr, (link_type *)ppkg_cntx_p->first_cfg_p);
+        ppkg_assemble_single_command(cntx_p->first_cfg_p, TRUE);
+        if (cntx_p->first_cfg_p != NULL)
+        {
+            free(cntx_p->first_cfg_p);
+            cntx_p->first_cfg_p = NULL;
+        }
     }
 
     do
@@ -1670,7 +1686,7 @@ static int ppkg_cmp_list_cb_atfile(queue_type *ini_q
         {
             if (!ini_node->is_multi_cmd)
             {
-                ppkg_assemble_single_command(ini_node);
+                ppkg_assemble_single_command(ini_node, FALSE);
                 if (q_delete(ini_q, (link_type *)ini_node) >= 0)
                 {
                     q_put(at_queue_ptr, (link_type *)ini_node);
@@ -1692,7 +1708,7 @@ static int ppkg_cmp_list_cb_atfile(queue_type *ini_q
                     if (NULL == data_ptr->diff_id_list ||
                         data_ptr->diff_id_list[i] == ini_node->id)
                     {
-                        ppkg_assemble_single_command(ini_node);
+                        ppkg_assemble_single_command(ini_node, FALSE);
                         i++;
                         if (q_delete(ini_q, (link_type *)ini_node) >= 0)
                         {
@@ -1736,10 +1752,25 @@ static void ppkg_assemble_file_head(void)
 * Return:
 * Description:
 *************************************************************************************/
-static void ppkg_assemble_file_tail(void)
+static void ppkg_assemble_file_tail(int file_type)
 {
+    ppkg_gen_context *cntx_p = ppkg_cntx_p;
+    queue_type      *at_queue_ptr = NULL;
     char buffer[32] = {0};
     int len = 0;
+
+    at_queue_ptr = &cntx_p->at_queue;
+
+    if (cntx_p->pwd_changed && FTYPE_AT == file_type)
+    {
+        ppkg_assemble_single_command(cntx_p->temp_node_p, FALSE);
+        q_put_head(at_queue_ptr, (link_type *)cntx_p->temp_node_p);
+        if (NULL != cntx_p->temp_node_p)
+        {
+            free(cntx_p->temp_node_p);
+            cntx_p->temp_node_p = NULL;
+        }
+    }
 
     len = snprintf(buffer, 32, "AtCmd[%d]=%s", ppkg_cntx_p->cmd_cnt, AT_FILE_TAIL_STR);
 
@@ -2072,6 +2103,7 @@ static bool ppkg_build_confirm_file(ppkg_gen_context *cntx_p, cfg_info_struct *c
     circal_buffer   *cbuf_ptr = NULL;
     char    query_cmd[MAX_QUERY_CMD_LEN] = {0};
     char    pre_cmd_type[MAX_LEN_CMD_TYPE + 1] = {0};
+    char    custom_password[MAX_LEN_PWD];
     char    *mlc_ptr = NULL;
     int     length = 0;
     int     read_len = 0;
@@ -2079,6 +2111,15 @@ static bool ppkg_build_confirm_file(ppkg_gen_context *cntx_p, cfg_info_struct *c
     at_queue_ptr = &cntx_p->at_queue;
     cbuf_ptr = &cntx_p->cir_buff;
     ppkg_cntx_p->cmd_cnt = 0;
+
+    if (ppkg_cntx_p->pwd_changed)
+    {
+        memcpy(custom_password, ppkg_cntx_p->new_password, MAX_LEN_PWD);
+    }
+    else
+    {
+        memcpy(custom_password, cfg_ptr->password, MAX_LEN_PWD);
+    }
 
     do
     {
@@ -2100,7 +2141,7 @@ static bool ppkg_build_confirm_file(ppkg_gen_context *cntx_p, cfg_info_struct *c
         {
             Sleep(100);
             /*AT+GTPEO?"gv300"*/
-            length = snprintf(query_cmd, MAX_QUERY_CMD_LEN, "%s%s?\"%s\"", LINE_ATGT_CMD, pre_cmd_type, cfg_ptr->password);
+            length = snprintf(query_cmd, MAX_QUERY_CMD_LEN, "%s%s?\"%s\"", LINE_ATGT_CMD, pre_cmd_type, custom_password);
             ppkg_com_write(cntx_p, query_cmd, length);
             read_len = ppkg_com_read(cntx_p, read_buff, MAX_TEMP_BLOCK_LEN);
             if (0 == read_len)
@@ -2228,7 +2269,7 @@ gen_result_enum ppkg_gen(void)
         ppkg_compare_cmd_list(&ppkg_cntx_p->custom_ini, &ppkg_cntx_p->differ_cfg, ppkg_cmp_list_cb_atfile))
     {
         DBG_TRACE(DBG_LOG,"build AT file");
-        ppkg_assemble_file_tail();
+        ppkg_assemble_file_tail(FTYPE_AT);
         ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, &ppkg_cntx_p->cir_buff);
         ppkg_reset_circal_buff(&ppkg_cntx_p->cir_buff);
     }
@@ -2250,7 +2291,7 @@ gen_result_enum ppkg_gen(void)
     if (ppkg_build_confirm_file(ppkg_cntx_p, &cfg_info))
     {
         DBG_TRACE(DBG_LOG,"build CFM file");
-        ppkg_assemble_file_tail();
+        ppkg_assemble_file_tail(FTYPE_CFM);
         ppkg_write_buffer_to_file(ppkg_cntx_p->temp_fp, &ppkg_cntx_p->cir_buff);
     }
     else

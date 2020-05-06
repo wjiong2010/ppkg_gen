@@ -23,6 +23,7 @@
 
 #define MAX_LEN_PATH        128
 #define MAX_LEN_FW_VER      64
+#define MAX_LEN_PWD         64
 #define MAX_CMD_LIST_SIZE   1000
 #define MAX_LEN_CMD_TYPE    3
 #define MAX_TEMP_BUFF_LEN   512
@@ -67,6 +68,9 @@ MetaResult[1]=OK
 #define AT_CFG_FILE_NAME    "ATFILE.ini"
 #define AT_CFM_FILE_NAME    "CFMFILE.ini"
 #define COMMA_SEPARATOR     ','
+
+#define FTYPE_AT    (0)
+#define FTYPE_CFM   (1)
 /************************************************************************************
 * Enums
 *************************************************************************************/
@@ -96,7 +100,7 @@ typedef struct {
     char path_def_cfg[MAX_LEN_PATH];
     char path_cust_cfg[MAX_LEN_PATH];
     char path_cust_ini[MAX_LEN_PATH];
-    char password[MAX_LEN_PATH];
+    char password[MAX_LEN_PWD];
 } cfg_info_struct;
 
 typedef struct _node {
@@ -161,6 +165,7 @@ typedef struct {
     cmd_node_struct *temp_node_p;
     cmd_node_struct *first_cfg_p;
     bool        pwd_changed;
+    char        new_password[MAX_LEN_PWD];
     HCOM        com_hdlr;
     circal_buffer cir_buff;
 } ppkg_gen_context;
