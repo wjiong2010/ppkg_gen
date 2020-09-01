@@ -1,39 +1,33 @@
 /************************************************************************************
-* FileName: ppkg_main.c
+* FileName: version.c
 *
 * Author: John.Wang
 *
-* Date: 2019-02-16
+* Date: 2019-03-15
 *
-* Descripiton: generator of a param package auto set
+* Descripiton: print debug info to standard output
 *************************************************************************************/
 /************************************************************************************
 * Include
 *************************************************************************************/
-#include "ppkg_main.h"
+#include <time.h>
 #include "debug.h"
-#include "ppkg_generator.h"
-
 /************************************************************************************
 * Define and Declaration
 *************************************************************************************/
-extern void print_ver(void);
-
+#define version_str PPKG_VER_STR
 /************************************************************************************
 * Process
 *************************************************************************************/
 /************************************************************************************
-* Function: main
-* Author @ Date: John.Wang@20200216
+* Function: print_ver
+* Author @ Date: John.Wang @ 20200901
 * Input:
 * Return:
-* Description: main function of the generator of a param package auto set
+* Description:
 *************************************************************************************/
-int main(int argc, char* argv[])
+void print_ver(void)
 {
-    debug_set_print_info_mask(DBG_LOG);
-    print_ver();
-    ppkg_gen();
-
-    return 0;
+    printf("PPKG_VER:%s", version_str);
 }
+
